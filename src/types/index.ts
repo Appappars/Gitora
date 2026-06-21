@@ -118,6 +118,7 @@ export interface ElectronAPI {
     getCurrentVersion: () => Promise<GitHubApiResult<string>>;
     getReleases: () => Promise<GitHubApiResult<Release[]>>;
     downloadRelease: (url: string, fileName: string) => Promise<GitHubApiResult<string>>;
+    downloadArchive: (owner: string, repo: string, sha: string) => Promise<GitHubApiResult<string>>;
   };
   openExternal: (url: string) => Promise<GitHubApiResult<null>>;
 }

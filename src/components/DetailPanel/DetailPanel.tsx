@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { Copy, ExternalLink, GitBranch, GitCommitHorizontal, Github, X } from 'lucide-react';
+import { Copy, Download, ExternalLink, GitBranch, GitCommitHorizontal, Github, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const DetailPanel: React.FC = () => {
-  const { selectedCommit, setSelectedCommit, notify, project, openExternal } = useApp();
+  const { selectedCommit, setSelectedCommit, notify, project, openExternal, downloadArchive } = useApp();
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -83,14 +83,26 @@ export const DetailPanel: React.FC = () => {
         )}
 
         {project && (
-          <button
-            className="w-full mt-4 p-2.5 border border-[rgba(38,23,50,.12)] rounded-lg text-[10px] font-semibold flex items-center justify-center gap-2"
-            onClick={() => void openExternal(`https://github.com/${project.repo}/commit/${selectedCommit.id}`)}
-          >
-            <Github size={17} />
-            Открыть на GitHub
-            <ExternalLink size={14} />
-          </button>
+          <>
+            <button
+              className="w-full mt-4 p-2.5 bg-[#261732] text-[#E7E0D6] rounded-lg text-[10px] font-semibold flex items-center justify-center gap-2 hover:bg-[#1a1024]"
+              onClick={() => {
+                const [owner, repo] = project.repo.split('/');
+                void downloadArchive(owner, repo, selectedCommit.id);
+              }}
+            >
+              <Download size={15} />
+              Скачать эту версию
+            </button>
+            <button
+              className="w-full mt-2 p-2.5 border border-[rgba(38,23,50,.12)] rounded-lg text-[10px] font-semibold flex items-center justify-center gap-2"
+              onClick={() => void openExternal(`https://github.com/${project.repo}/commit/${selectedCommit.id}`)}
+            >
+              <Github size={17} />
+              Открыть на GitHub
+              <ExternalLink size={14} />
+            </button>
+          </>
         )}
       </div>
     </aside>

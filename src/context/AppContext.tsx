@@ -53,6 +53,7 @@ interface AppContextType extends AppState {
   openExternal: (url: string) => Promise<void>;
   loadReleases: () => Promise<void>;
   downloadRelease: (url: string, fileName: string) => Promise<string | null>;
+  downloadArchive: (owner: string, repo: string, sha: string) => Promise<string | null>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -228,6 +229,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const downloadArchive = async (owner: string, repo: string, sha: string): Promise<string | null> => {
+    if (!window.electronAPI) {
+      showError('Загрузка доступна в приложении Gitora');
+      return null;
+    }
+    setLoading(true);
+    try {
+      const result = await window.electronAPI.app.downloadArchive(owner, repo, sha);
+      if (result?.success && result.data) {
+        notify('Архив скачан');
+        return result.data;
+      }
+      showError(result?.error || 'Не удалось скачать архив');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
@@ -333,6 +353,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       openExternal,
       loadReleases,
       downloadRelease,
+      downloadArchive,
     }}>
       {children}
     </AppContext.Provider>

@@ -238,3 +238,23 @@ ipcMain.handle('app:download-release', result(async (_event, { url, fileName }) 
 
   return filePath;
 }));
+
+ipcMain.handle('app:download-archive', result(async (_event, { owner, repo, sha }) => {
+  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+
+  const url = `${GITHUB_ORIGIN}/${owner}/${repo}/archive/${sha}.zip`;
+  const response = await fetch(url, {
+    headers: githubToken ? { Authorization: `Bearer ${githubToken}` } : {},
+  });
+
+  if (!response.ok) throw new Error('Не удалось скачать архив');
+
+  const fileName = `${repo}-${sha.slice(0, 7)}.zip`;
+  const downloadsPath = app.getPath('downloads');
+  const filePath = path.join(downloadsPath, fileName);
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(filePath, buffer);
+
+  return filePath;
+}));

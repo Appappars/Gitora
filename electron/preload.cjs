@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getCurrentVersion: () => ipcRenderer.invoke('app:get-current-version'),
     getReleases: () => ipcRenderer.invoke('app:get-releases'),
     downloadRelease: (url, fileName) => ipcRenderer.invoke('app:download-release', { url, fileName }),
+    downloadArchive: (owner, repo, sha) => ipcRenderer.invoke('app:download-archive', { owner, repo, sha }),
   },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 });
