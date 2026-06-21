@@ -149,6 +149,7 @@ gitora/
 ├── mcp-config.json     # Конфигурация MCP
 └── package.json
 ```
+Разработано совместно Sabinchous и Appappars
 
 ## Лицензия
 
