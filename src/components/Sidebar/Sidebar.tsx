@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, GitBranch, Github, LogOut, Plus, X } from 'lucide-react';
+import { ChevronDown, Download, GitBranch, Github, LogOut, Plus, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ProjectList } from './ProjectList';
 
@@ -9,6 +9,7 @@ export const Sidebar: React.FC = () => {
     setMobileOpen,
     setCreateOpen,
     setLoginOpen,
+    setUpdatesOpen,
     user,
     connected,
     logout,
@@ -77,9 +78,16 @@ export const Sidebar: React.FC = () => {
       )}
 
       <div className="mt-auto p-3 border-t border-[rgba(231,224,214,.09)]">
+        <button
+          className="w-full flex items-center gap-2 text-left text-xs text-[rgba(231,224,214,.62)] py-2 hover:text-[#E7E0D6]"
+          onClick={() => setUpdatesOpen(true)}
+        >
+          <Download size={16} />
+          Обновления
+        </button>
         {connected ? (
           <button
-            className="w-full flex items-center gap-2 text-left text-xs text-[rgba(231,224,214,.62)] py-2"
+            className="w-full flex items-center gap-2 text-left text-xs text-[rgba(231,224,214,.62)] py-2 hover:text-[#E7E0D6]"
             onClick={() => void logout()}
           >
             <LogOut size={16} />
@@ -87,7 +95,7 @@ export const Sidebar: React.FC = () => {
           </button>
         ) : (
           <button
-            className="w-full flex items-center gap-2 text-left text-xs text-[rgba(231,224,214,.62)] py-2"
+            className="w-full flex items-center gap-2 text-left text-xs text-[rgba(231,224,214,.62)] py-2 hover:text-[#E7E0D6]"
             onClick={() => setLoginOpen(true)}
           >
             <Github size={16} />

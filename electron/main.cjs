@@ -204,3 +204,37 @@ ipcMain.handle('open-external', result(async (_event, url) => {
   await shell.openExternal(url);
   return null;
 }));
+
+ipcMain.handle('app:get-current-version', result(async () => {
+  return app.getVersion();
+}));
+
+ipcMain.handle('app:get-releases', result(async () => {
+  const releases = await githubRequest('/repos/Appappars/Gitora/releases?per_page=20');
+  return releases.map(release => ({
+    tag: release.tag_name,
+    name: release.name,
+    body: release.body,
+    publishedAt: release.published_at,
+    prerelease: release.prerelease,
+    assets: release.assets.map(asset => ({
+      name: asset.name,
+      size: asset.size,
+      downloadUrl: asset.browser_download_url,
+      downloadCount: asset.download_count,
+    })),
+  }));
+}));
+
+ipcMain.handle('app:download-release', result(async (_event, { url, fileName }) => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Не удалось скачать файл');
+
+  const downloadsPath = app.getPath('downloads');
+  const filePath = path.join(downloadsPath, fileName);
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(filePath, buffer);
+
+  return filePath;
+}));

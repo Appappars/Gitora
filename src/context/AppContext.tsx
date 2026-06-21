@@ -13,6 +13,7 @@ import {
   GitHubRepo,
   GitHubUser,
   Project,
+  Release,
 } from '../types';
 import { computeGraphLayout, GraphLayoutResult } from '../lib/graphLayout';
 
@@ -23,6 +24,7 @@ interface AppState {
   mobileOpen: boolean;
   createOpen: boolean;
   loginOpen: boolean;
+  updatesOpen: boolean;
   toast: string;
   projects: Project[];
   commits: Commit[];
@@ -32,6 +34,8 @@ interface AppState {
   loading: boolean;
   error: string | null;
   graphLayout: GraphLayoutResult | null;
+  releases: Release[];
+  currentVersion: string;
 }
 
 interface AppContextType extends AppState {
@@ -41,11 +45,14 @@ interface AppContextType extends AppState {
   setMobileOpen: (open: boolean) => void;
   setCreateOpen: (open: boolean) => void;
   setLoginOpen: (open: boolean) => void;
+  setUpdatesOpen: (open: boolean) => void;
   notify: (text: string) => void;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   createRepo: (name: string, description: string, isPrivate: boolean) => Promise<boolean>;
   openExternal: (url: string) => Promise<void>;
+  loadReleases: () => Promise<void>;
+  downloadRelease: (url: string, fileName: string) => Promise<string | null>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -100,6 +107,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
@@ -109,6 +117,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [graphLayout, setGraphLayout] = useState<GraphLayoutResult | null>(null);
+  const [releases, setReleases] = useState<Release[]>([]);
+  const [currentVersion, setCurrentVersion] = useState('0.1.4');
   const toastTimer = useRef<number | undefined>(undefined);
   const requestId = useRef(0);
   const initialized = useRef(false);
@@ -191,6 +201,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!result?.success) showError(result?.error || 'Не удалось открыть ссылку');
   };
 
+  const loadReleases = async () => {
+    if (!window.electronAPI) return;
+    const result = await window.electronAPI.app.getReleases();
+    if (result?.success && result.data) {
+      setReleases(result.data);
+    }
+  };
+
+  const downloadRelease = async (url: string, fileName: string): Promise<string | null> => {
+    if (!window.electronAPI) {
+      showError('Загрузка доступна в приложении Gitora');
+      return null;
+    }
+    setLoading(true);
+    try {
+      const result = await window.electronAPI.app.downloadRelease(url, fileName);
+      if (result?.success && result.data) {
+        notify(`Файл ${fileName} загружен`);
+        return result.data;
+      }
+      showError(result?.error || 'Не удалось загрузить файл');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
@@ -200,15 +237,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return;
       }
       setLoading(true);
-      const result = await window.electronAPI.github.restoreSession();
-      if (result.success && result.data) {
-        setUser(result.data);
+      const [sessionResult, versionResult] = await Promise.all([
+        window.electronAPI.github.restoreSession(),
+        window.electronAPI.app.getCurrentVersion(),
+      ]);
+      if (versionResult?.success && versionResult.data) {
+        setCurrentVersion(versionResult.data);
+      }
+      if (sessionResult.success && sessionResult.data) {
+        setUser(sessionResult.data);
         setConnected(true);
         await loadRepos();
       } else {
         setLoginOpen(true);
       }
       setLoading(false);
+      void loadReleases();
     };
     void restore();
     return () => window.clearTimeout(toastTimer.current);
@@ -263,6 +307,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       mobileOpen,
       createOpen,
       loginOpen,
+      updatesOpen,
       toast,
       projects,
       commits,
@@ -272,17 +317,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       loading,
       error,
       graphLayout,
+      releases,
+      currentVersion,
       setProject,
       setSelectedCommit,
       setBranchFilter,
       setMobileOpen,
       setCreateOpen,
       setLoginOpen,
+      setUpdatesOpen,
       notify,
       login,
       logout,
       createRepo,
       openExternal,
+      loadReleases,
+      downloadRelease,
     }}>
       {children}
     </AppContext.Provider>

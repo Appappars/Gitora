@@ -85,6 +85,22 @@ export interface RepositoryData {
   branches: GitHubBranch[];
 }
 
+export interface ReleaseAsset {
+  name: string;
+  size: number;
+  downloadUrl: string;
+  downloadCount: number;
+}
+
+export interface Release {
+  tag: string;
+  name: string;
+  body: string;
+  publishedAt: string;
+  prerelease: boolean;
+  assets: ReleaseAsset[];
+}
+
 export interface ElectronAPI {
   github: {
     login: (token: string) => Promise<GitHubApiResult<GitHubUser>>;
@@ -97,6 +113,11 @@ export interface ElectronAPI {
       description: string,
       isPrivate: boolean,
     ) => Promise<GitHubApiResult<GitHubRepo>>;
+  };
+  app: {
+    getCurrentVersion: () => Promise<GitHubApiResult<string>>;
+    getReleases: () => Promise<GitHubApiResult<Release[]>>;
+    downloadRelease: (url: string, fileName: string) => Promise<GitHubApiResult<string>>;
   };
   openExternal: (url: string) => Promise<GitHubApiResult<null>>;
 }

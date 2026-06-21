@@ -16,6 +16,7 @@ import { Graph } from './components/Graph/Graph';
 import { DetailPanel } from './components/DetailPanel/DetailPanel';
 import { CreateModal } from './components/Modal/CreateModal';
 import { LoginModal } from './components/Modal/LoginModal';
+import { UpdatesModal } from './components/Modal/UpdatesModal';
 import { Toast } from './components/common/Toast';
 
 export const App: React.FC = () => {
@@ -200,6 +201,7 @@ export const App: React.FC = () => {
 
       {loginOpen && <LoginModal />}
       {createOpen && <CreateModal />}
+      <UpdatesModal />
       <Toast message={toast} />
 
       {loading && (

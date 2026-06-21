@@ -10,5 +10,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createRepo: (name, description, isPrivate) =>
       ipcRenderer.invoke('github:create-repo', { name, description, private: isPrivate }),
   },
+  app: {
+    getCurrentVersion: () => ipcRenderer.invoke('app:get-current-version'),
+    getReleases: () => ipcRenderer.invoke('app:get-releases'),
+    downloadRelease: (url, fileName) => ipcRenderer.invoke('app:download-release', { url, fileName }),
+  },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 });
