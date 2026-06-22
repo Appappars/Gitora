@@ -9,11 +9,13 @@ import React, {
 import {
   Branch,
   Commit,
+  CreateRepositoryResult,
   GitHubCommit,
   GitHubRepo,
   GitHubUser,
   Project,
   Release,
+  UploadFolderSummary,
 } from '../types';
 import { computeGraphLayout, GraphLayoutResult } from '../lib/graphLayout';
 
@@ -49,7 +51,9 @@ interface AppContextType extends AppState {
   notify: (text: string) => void;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
-  createRepo: (name: string, description: string, isPrivate: boolean) => Promise<boolean>;
+  createRepo: (name: string, description: string, isPrivate: boolean, folderPath?: string) => Promise<CreateRepositoryResult | null>;
+  selectUploadFolder: () => Promise<UploadFolderSummary | null>;
+  clearUploadFolder: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   loadReleases: () => Promise<void>;
   downloadRelease: (url: string, fileName: string) => Promise<string | null>;
@@ -181,20 +185,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     notify('GitHub отключён');
   };
 
-  const createRepo = async (name: string, description: string, isPrivate: boolean) => {
+  const createRepo = async (name: string, description: string, isPrivate: boolean, folderPath?: string): Promise<CreateRepositoryResult | null> => {
     setLoading(true);
     try {
-      const result = await window.electronAPI?.github.createRepo(name, description, isPrivate);
-      if (!result?.success) {
+      const result = await window.electronAPI?.github.createRepo(name, description, isPrivate, folderPath);
+      if (!result?.success || !result.data) {
         showError(result?.error || 'Не удалось создать репозиторий');
-        return false;
+        return null;
       }
-      notify(`Проект «${name}» создан в GitHub`);
+      const data = result.data;
+      if (data.uploadStatus === 'error') {
+        showError(`Репозиторий создан, но загрузка файлов завершилась ошибкой`);
+      } else if (data.uploadStatus === 'partial') {
+        notify(`Проект создан. Загружено ${data.uploadedCount}, пропущено ${data.skippedCount}`);
+      } else if (data.uploadStatus === 'success') {
+        notify(`Проект «${name}» создан с ${data.uploadedCount} файлами`);
+      } else {
+        notify(`Проект «${name}» создан в GitHub`);
+      }
       await loadRepos();
-      return true;
+      return data;
     } finally {
       setLoading(false);
     }
+  };
+
+  const selectUploadFolder = async (): Promise<UploadFolderSummary | null> => {
+    if (!window.electronAPI) return null;
+    const result = await window.electronAPI.app.selectUploadFolder();
+    if (result?.success && result.data) return result.data;
+    if (result?.error) showError(result.error);
+    return null;
+  };
+
+  const clearUploadFolder = async () => {
+    await window.electronAPI?.app.clearUploadFolder();
   };
 
   const openExternal = async (url: string) => {
@@ -350,6 +375,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       login,
       logout,
       createRepo,
+      selectUploadFolder,
+      clearUploadFolder,
       openExternal,
       loadReleases,
       downloadRelease,

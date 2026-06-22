@@ -170,8 +170,8 @@ export const App: React.FC = () => {
               ))}
             </section>
 
-            <section className="mx-4 sm:mx-8 mb-4 border border-[rgba(38,23,50,.12)] rounded-xl bg-white overflow-hidden min-h-[500px] flex flex-col flex-1">
-              <div className="min-h-[52px] border-b border-[rgba(38,23,50,.12)] flex items-center justify-between gap-3 px-4 py-2">
+            <section className="mx-4 sm:mx-8 mb-4 border border-[rgba(38,23,50,.12)] rounded-xl bg-white min-h-[500px] flex flex-col flex-1">
+              <div className="min-h-[52px] border-b border-[rgba(38,23,50,.12)] rounded-t-xl flex items-center justify-between gap-3 px-4 py-2">
                 <b className="text-xs">Граф коммитов</b>
                 {branches.length > 0 && (
                   <label className="h-[34px] border border-[rgba(38,23,50,.12)] rounded-lg flex items-center px-2.5 gap-1.5 bg-white">
@@ -190,8 +190,10 @@ export const App: React.FC = () => {
                   </label>
                 )}
               </div>
-              <div className="flex min-h-[445px] flex-1 overflow-auto">
-                <Graph />
+              <div className="flex min-h-[445px] flex-1">
+                <div className="flex-1 min-w-0 overflow-auto">
+                  <Graph />
+                </div>
                 <DetailPanel />
               </div>
             </section>

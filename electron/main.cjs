@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
+const ignore = require('ignore');
 
 const isDev = process.argv.includes('--dev');
 const GITHUB_ORIGIN = 'https://github.com';
@@ -99,6 +100,143 @@ function isAllowedNavigation(rawUrl) {
   }
 }
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_TOTAL_SIZE = 1024 * 1024 * 1024;
+const ALWAYS_EXCLUDED = new Set(['.git', 'node_modules', '.DS_Store', 'Thumbs.db']);
+const EXCLUDED_PATTERNS = ['.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx'];
+
+let selectedUploadFolder = null;
+
+async function readGitignore(dirPath) {
+  const ig = ignore();
+  try {
+    const content = await fs.readFile(path.join(dirPath, '.gitignore'), 'utf8');
+    ig.add(content.split('\n').filter(line => line.trim() && !line.startsWith('#')));
+  } catch {}
+  for (const pattern of EXCLUDED_PATTERNS) {
+    ig.add(pattern);
+  }
+  return ig;
+}
+
+async function scanFolder(dirPath, ig, rootPath) {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  const files = [];
+  const warnings = [];
+  let totalBytes = 0;
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    const relativePath = path.relative(rootPath, fullPath).replace(/\\/g, '/');
+
+    if (entry.isDirectory()) {
+      if (ALWAYS_EXCLUDED.has(entry.name)) continue;
+      if (ig.ignores(relativePath + '/') || ig.ignores(entry.name)) continue;
+
+      try {
+        const stat = await fs.lstat(fullPath);
+        if (stat.isSymbolicLink()) {
+          warnings.push(`Symlink пропущен: ${relativePath}`);
+          continue;
+        }
+      } catch { continue; }
+
+      const sub = await scanFolder(fullPath, ig, rootPath);
+      files.push(...sub.files);
+      totalBytes += sub.totalBytes;
+      warnings.push(...sub.warnings);
+    } else {
+      if (ig.ignores(relativePath) || ig.ignores(entry.name)) continue;
+
+      try {
+        const stat = await fs.lstat(fullPath);
+        if (stat.isSymbolicLink()) {
+          warnings.push(`Symlink пропущен: ${relativePath}`);
+          continue;
+        }
+        if (stat.size > MAX_FILE_SIZE) {
+          warnings.push(`Файл >100 МБ пропущен: ${relativePath}`);
+          continue;
+        }
+        totalBytes += stat.size;
+        if (totalBytes > MAX_TOTAL_SIZE) {
+          warnings.push(`Общий размер превышает 1 ГБ`);
+        }
+        files.push({ relativePath, fullPath, size: stat.size });
+      } catch { continue; }
+    }
+  }
+
+  return { files, totalBytes, warnings };
+}
+
+async function scanUploadFolder(dirPath) {
+  const ig = await readGitignore(dirPath);
+  const { files, totalBytes, warnings } = await scanFolder(dirPath, ig, dirPath);
+  return { path: dirPath, fileCount: files.length, totalBytes, warnings, files };
+}
+
+async function uploadFolderToRepo(owner, repo, folderData) {
+  const { files } = folderData;
+  if (files.length === 0) return { uploadedCount: 0, skippedCount: 0, status: 'success' };
+
+  const blobShaMap = new Map();
+  let uploadedCount = 0;
+  let skippedCount = 0;
+
+  for (const file of files) {
+    try {
+      const content = await fs.readFile(file.fullPath);
+      const encoding = 'base64';
+      const blob = await githubRequest(`/repos/${owner}/${repo}/blobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: content.toString('base64'),
+          encoding,
+        }),
+      });
+      blobShaMap.set(file.relativePath, blob.sha);
+      uploadedCount++;
+    } catch {
+      skippedCount++;
+    }
+  }
+
+  const treeItems = [];
+  for (const [filePath, sha] of blobShaMap) {
+    treeItems.push({ path: filePath, mode: '100644', type: 'blob', sha });
+  }
+
+  if (treeItems.length === 0) {
+    return { uploadedCount, skippedCount, status: 'error' };
+  }
+
+  const tree = await githubRequest(`/repos/${owner}/${repo}/trees`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tree: treeItems }),
+  });
+
+  const commit = await githubRequest(`/repos/${owner}/${repo}/commits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Initial commit',
+      tree: tree.sha,
+    }),
+  });
+
+  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/main`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sha: commit.sha, force: true }),
+  });
+
+  const status = skippedCount > 0 ? 'partial' : 'success';
+  return { uploadedCount, skippedCount, status };
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -188,7 +326,7 @@ ipcMain.handle('github:repository', result(async (_event, { owner, repo }) => {
 ipcMain.handle('github:create-repo', result(async (_event, input) => {
   const name = typeof input?.name === 'string' ? input.name.trim() : '';
   if (!name || !REPO_PART.test(name)) throw new Error('Некорректное имя репозитория');
-  return githubRequest('/user/repos', {
+  const repo = await githubRequest('/user/repos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -197,6 +335,43 @@ ipcMain.handle('github:create-repo', result(async (_event, input) => {
       private: Boolean(input.private),
     }),
   });
+
+  const folderPath = typeof input?.folderPath === 'string' ? input.folderPath.trim() : '';
+  if (!folderPath) {
+    return { repo, uploadStatus: 'none', uploadedCount: 0, skippedCount: 0 };
+  }
+
+  const folderData = await scanUploadFolder(folderPath);
+  if (folderData.files.length === 0) {
+    return { repo, uploadStatus: 'none', uploadedCount: 0, skippedCount: 0 };
+  }
+
+  try {
+    const [owner] = repo.full_name.split('/');
+    const uploadResult = await uploadFolderToRepo(owner, repo.name, folderData);
+    return { repo, ...uploadResult };
+  } catch (uploadError) {
+    return { repo, uploadStatus: 'error', uploadedCount: 0, skippedCount: folderData.fileCount };
+  }
+}));
+
+ipcMain.handle('app:select-upload-folder', result(async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: 'Выберите папку проекта',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const dirPath = result.filePaths[0];
+  const folderData = await scanUploadFolder(dirPath);
+  selectedUploadFolder = folderData;
+  return { path: folderData.path, fileCount: folderData.fileCount, totalBytes: folderData.totalBytes, warnings: folderData.warnings };
+}));
+
+ipcMain.handle('app:clear-upload-folder', result(async () => {
+  selectedUploadFolder = null;
+  return null;
 }));
 
 ipcMain.handle('open-external', result(async (_event, url) => {

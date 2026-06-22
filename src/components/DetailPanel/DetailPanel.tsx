@@ -25,7 +25,7 @@ export const DetailPanel: React.FC = () => {
 
   return (
     <aside
-      className="fixed md:sticky inset-x-0 bottom-0 h-[68vh] md:h-auto md:w-[294px] flex-none border border-b-0 md:border-y-0 md:border-r-0 border-[rgba(38,23,50,.12)] bg-white rounded-t-2xl md:rounded-none z-30 md:z-auto shadow-lg md:shadow-none overflow-auto md:top-0 md:self-start"
+      className="fixed md:sticky inset-x-0 bottom-0 h-[68vh] md:h-fit md:max-h-[calc(100vh-74px)] md:w-[294px] flex-none border border-b-0 md:border-y-0 md:border-l border-[rgba(38,23,50,.12)] bg-white rounded-t-2xl md:rounded-none z-30 md:z-auto shadow-lg md:shadow-none overflow-auto md:top-[66px] md:self-start"
       aria-label="Детали коммита"
     >
       <div className="sticky top-0 h-[48px] bg-white border-b border-[rgba(38,23,50,.12)] flex items-center justify-between px-4 text-[9px] font-extrabold tracking-wider text-[#7D7482] z-10">

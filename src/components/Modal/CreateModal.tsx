@@ -1,12 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { Check, FolderGit2, Github, X } from 'lucide-react';
+import { Check, FolderGit2, FolderOpen, Github, Trash2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { UploadFolderSummary } from '../../types';
 
 export const CreateModal: React.FC = () => {
-  const { setCreateOpen, createRepo, loading } = useApp();
+  const { setCreateOpen, createRepo, loading, selectUploadFolder, clearUploadFolder } = useApp();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(true);
+  const [folderSummary, setFolderSummary] = useState<UploadFolderSummary | null>(null);
+
+  const handleSelectFolder = async () => {
+    const summary = await selectUploadFolder();
+    if (summary) setFolderSummary(summary);
+  };
+
+  const handleClearFolder = async () => {
+    await clearUploadFolder();
+    setFolderSummary(null);
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} Б`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} ГБ`;
+  };
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -41,7 +60,8 @@ export const CreateModal: React.FC = () => {
 
         <form onSubmit={async (event) => {
           event.preventDefault();
-          if (await createRepo(name.trim(), description.trim(), isPrivate)) setCreateOpen(false);
+          const result = await createRepo(name.trim(), description.trim(), isPrivate, folderSummary?.path);
+          if (result) setCreateOpen(false);
         }}>
           <label className="block text-xs font-bold">
             Название
@@ -65,6 +85,53 @@ export const CreateModal: React.FC = () => {
               className="block w-full resize-none border border-[rgba(38,23,50,.12)] bg-[#F3EFE9] rounded-lg p-3 text-sm mt-2"
             />
           </label>
+
+          <div className="mt-4">
+            <span className="text-xs font-bold">Папка проекта</span>
+            <span className="text-[10px] text-[#7D7482] ml-1">(необязательно)</span>
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={handleSelectFolder}
+                disabled={loading}
+                className="flex-1 h-[42px] border border-[rgba(38,23,50,.12)] bg-[#F3EFE9] rounded-lg px-3 text-sm flex items-center gap-2 text-left truncate hover:bg-[#E7E0D6] disabled:opacity-40"
+              >
+                <FolderOpen size={16} className="flex-none text-[#7D7482]" />
+                <span className="truncate text-[#7D7482]">
+                  {folderSummary ? folderSummary.path : 'Выбрать папку…'}
+                </span>
+              </button>
+              {folderSummary && (
+                <button
+                  type="button"
+                  onClick={handleClearFolder}
+                  disabled={loading}
+                  className="w-[42px] flex-none border border-[rgba(38,23,50,.12)] bg-[#F3EFE9] rounded-lg grid place-items-center hover:bg-[#E7E0D6] disabled:opacity-40"
+                  aria-label="Очистить папку"
+                >
+                  <Trash2 size={16} className="text-[#7D7482]" />
+                </button>
+              )}
+            </div>
+            {folderSummary && (
+              <div className="mt-2 p-2 bg-[#F3EFE9] rounded-lg text-[10px] text-[#7D7482]">
+                <div className="flex justify-between">
+                  <span>Файлов: <b className="text-[#261732]">{folderSummary.fileCount}</b></span>
+                  <span>Размер: <b className="text-[#261732]">{formatBytes(folderSummary.totalBytes)}</b></span>
+                </div>
+                {folderSummary.warnings.length > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-[rgba(38,23,50,.08)]">
+                    {folderSummary.warnings.slice(0, 3).map((w, i) => (
+                      <div key={i} className="text-[#A16C62]">{w}</div>
+                    ))}
+                    {folderSummary.warnings.length > 3 && (
+                      <div className="text-[#7D7482]">и ещё {folderSummary.warnings.length - 3}…</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <fieldset className="mt-4">
             <legend className="text-xs font-bold">Видимость</legend>

@@ -98,8 +98,12 @@ export const Graph: React.FC = () => {
             branchColor={graphLayout.branchColors[node.branch] || '#261732'}
             totalHeight={viewBoxHeight}
             onClick={() => {
-              const fullCommit = commits.find(commit => commit.id === node.sha);
-              if (fullCommit) setSelectedCommit(fullCommit);
+              if (selectedCommit?.id === node.sha) {
+                setSelectedCommit(null);
+              } else {
+                const fullCommit = commits.find(commit => commit.id === node.sha);
+                if (fullCommit) setSelectedCommit(fullCommit);
+              }
             }}
           />
         ))}

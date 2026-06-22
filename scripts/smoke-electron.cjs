@@ -39,6 +39,10 @@ ipcMain.handle('github:repository', async () => ({
 }));
 ipcMain.handle('github:create-repo', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('open-external', async () => ({ success: false, error: 'Disabled in smoke test' }));
+ipcMain.handle('app:get-current-version', async () => ({ success: true, data: 'smoke' }));
+ipcMain.handle('app:get-releases', async () => ({ success: true, data: [] }));
+ipcMain.handle('app:download-release', async () => ({ success: false, error: 'Disabled in smoke test' }));
+ipcMain.handle('app:download-archive', async () => ({ success: false, error: 'Disabled in smoke test' }));
 
 app.whenReady().then(async () => {
   const errors = [];
@@ -76,12 +80,29 @@ app.whenReady().then(async () => {
               nodeRect.top + nodeRect.height / 2 - (svgRect.top + edgeStart.y)
             )
           : null;
+        node?.click();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const panel = document.querySelector('aside[aria-label]');
+        const panelBeforeScroll = panel?.getBoundingClientRect();
+        window.scrollTo(0, Math.min(500, document.documentElement.scrollHeight));
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const panelAfterScroll = panel?.getBoundingClientRect();
+        const panelStaysVisible = Boolean(
+          panelBeforeScroll
+          && panelAfterScroll
+          && panelAfterScroll.top >= 65
+          && panelAfterScroll.bottom <= innerHeight + 1
+          && panelAfterScroll.top <= panelBeforeScroll.top
+        );
         return {
         title: document.title,
         rootChildren: document.querySelector('#root')?.childElementCount ?? 0,
         hasGitora: document.body.innerText.toLowerCase().includes('gitora'),
         graphVisible: Boolean(node && edge),
-        alignmentError
+        alignmentError,
+        panelStaysVisible,
+        panelBeforeTop: panelBeforeScroll?.top ?? null,
+        panelAfterTop: panelAfterScroll?.top ?? null
         };
       })()
     `);
@@ -92,6 +113,7 @@ app.whenReady().then(async () => {
       || !state.graphVisible
       || state.alignmentError === null
       || state.alignmentError > 0.5
+      || !state.panelStaysVisible
       || errors.length
     ) {
       throw new Error(JSON.stringify({ state, errors }));

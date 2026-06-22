@@ -101,6 +101,20 @@ export interface Release {
   assets: ReleaseAsset[];
 }
 
+export interface UploadFolderSummary {
+  path: string;
+  fileCount: number;
+  totalBytes: number;
+  warnings: string[];
+}
+
+export interface CreateRepositoryResult {
+  repo: GitHubRepo;
+  uploadStatus: 'none' | 'success' | 'partial' | 'error';
+  uploadedCount: number;
+  skippedCount: number;
+}
+
 export interface ElectronAPI {
   github: {
     login: (token: string) => Promise<GitHubApiResult<GitHubUser>>;
@@ -112,13 +126,16 @@ export interface ElectronAPI {
       name: string,
       description: string,
       isPrivate: boolean,
-    ) => Promise<GitHubApiResult<GitHubRepo>>;
+      folderPath?: string,
+    ) => Promise<GitHubApiResult<CreateRepositoryResult>>;
   };
   app: {
     getCurrentVersion: () => Promise<GitHubApiResult<string>>;
     getReleases: () => Promise<GitHubApiResult<Release[]>>;
     downloadRelease: (url: string, fileName: string) => Promise<GitHubApiResult<string>>;
     downloadArchive: (owner: string, repo: string, sha: string) => Promise<GitHubApiResult<string>>;
+    selectUploadFolder: () => Promise<GitHubApiResult<UploadFolderSummary | null>>;
+    clearUploadFolder: () => Promise<GitHubApiResult<null>>;
   };
   openExternal: (url: string) => Promise<GitHubApiResult<null>>;
 }

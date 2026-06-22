@@ -1,7 +1,7 @@
 {
   "name": "gitora",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.8",
   "description": "Desktop GitHub history graph",
   "author": "Gitora",
   "type": "module",
@@ -16,6 +16,7 @@
     "electron:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-electron.ps1"
   },
   "dependencies": {
+    "ignore": "^7.0.5",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
