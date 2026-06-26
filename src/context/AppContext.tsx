@@ -11,6 +11,8 @@ import {
   Commit,
   CreateRepositoryResult,
   GitHubCommit,
+  GitHubIssue,
+  GitHubPR,
   GitHubRepo,
   GitHubUser,
   Project,
@@ -18,6 +20,7 @@ import {
   UploadFolderSummary,
 } from '../types';
 import { computeGraphLayout, GraphLayoutResult } from '../lib/graphLayout';
+import { applyThemePreference, readThemePreference } from '../lib/theme';
 
 interface AppState {
   project: Project | null;
@@ -25,6 +28,9 @@ interface AppState {
   branchFilter: string;
   mobileOpen: boolean;
   createOpen: boolean;
+  editOpen: boolean;
+  branchOpen: boolean;
+  settingsOpen: boolean;
   loginOpen: boolean;
   updatesOpen: boolean;
   toast: string;
@@ -46,12 +52,37 @@ interface AppContextType extends AppState {
   setBranchFilter: (filter: string) => void;
   setMobileOpen: (open: boolean) => void;
   setCreateOpen: (open: boolean) => void;
+  setEditOpen: (open: boolean) => void;
+  setBranchOpen: (open: boolean) => void;
+  setSettingsOpen: (open: boolean) => void;
   setLoginOpen: (open: boolean) => void;
   setUpdatesOpen: (open: boolean) => void;
   notify: (text: string) => void;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   createRepo: (name: string, description: string, isPrivate: boolean, folderPath?: string) => Promise<CreateRepositoryResult | null>;
+  deleteRepo: (owner: string, repo: string) => Promise<boolean>;
+  updateRepo: (owner: string, repo: string, data: { name?: string; description?: string; private?: boolean }) => Promise<boolean>;
+  createBranch: (owner: string, repo: string, name: string, fromSha: string) => Promise<boolean>;
+  deleteBranch: (owner: string, repo: string, branch: string) => Promise<boolean>;
+  renameBranch: (owner: string, repo: string, branch: string, newName: string) => Promise<boolean>;
+  pullRequests: GitHubPR[];
+  selectedPR: GitHubPR | null;
+  setSelectedPR: (pr: GitHubPR | null) => void;
+  prOpen: boolean;
+  setPrOpen: (open: boolean) => void;
+  loadPullRequests: (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => Promise<void>;
+  getPullRequest: (owner: string, repo: string, number: number) => Promise<GitHubPR | null>;
+  createPullRequest: (owner: string, repo: string, title: string, body: string, head: string, base: string) => Promise<boolean>;
+  issues: GitHubIssue[];
+  selectedIssue: GitHubIssue | null;
+  setSelectedIssue: (issue: GitHubIssue | null) => void;
+  issueOpen: boolean;
+  setIssueOpen: (open: boolean) => void;
+  loadIssues: (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => Promise<void>;
+  getIssue: (owner: string, repo: string, number: number) => Promise<GitHubIssue | null>;
+  createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<boolean>;
+  searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubCommit[]>;
   selectUploadFolder: () => Promise<UploadFolderSummary | null>;
   clearUploadFolder: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
@@ -62,7 +93,7 @@ interface AppContextType extends AppState {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 const PROJECT_COLORS = ['#AEA989', '#8E7CA3', '#C58C75', '#5D7659'];
-const BRANCH_COLORS = ['#261732', '#C58C75', '#8E7CA3', '#5D7659', '#AEA989', '#A26E60'];
+const BRANCH_COLORS = ['var(--branch-main)', 'var(--branch-1)', 'var(--branch-2)', 'var(--branch-3)', 'var(--branch-4)', 'var(--branch-5)'];
 
 export const useApp = () => {
   const context = useContext(AppContext);
@@ -79,6 +110,8 @@ function mapProjects(repos: GitHubRepo[]): Project[] {
     commits: 0,
     branches: 0,
     updated: new Date(repo.updated_at).toLocaleDateString('ru-RU'),
+    description: repo.description || '',
+    isPrivate: repo.private,
   }));
 }
 
@@ -111,6 +144,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [branchFilter, setBranchFilter] = useState('all');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [toast, setToast] = useState('');
@@ -210,6 +246,161 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const deleteRepo = async (owner: string, repo: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.deleteRepo(owner, repo);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось удалить репозиторий');
+        return false;
+      }
+      notify('Репозиторий удалён');
+      await loadRepos();
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateRepo = async (owner: string, repo: string, data: { name?: string; description?: string; private?: boolean }): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.updateRepo(owner, repo, data);
+      if (!result?.success || !result.data) {
+        showError(result?.error || 'Не удалось обновить репозиторий');
+        return false;
+      }
+      notify('Репозиторий обновлён');
+      await loadRepos();
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createBranch = async (owner: string, repo: string, name: string, fromSha: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.createBranch(owner, repo, name, fromSha);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось создать ветку');
+        return false;
+      }
+      notify(`Ветка «${name}» создана`);
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteBranch = async (owner: string, repo: string, branch: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.deleteBranch(owner, repo, branch);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось удалить ветку');
+        return false;
+      }
+      notify(`Ветка «${branch}» удалена`);
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renameBranch = async (owner: string, repo: string, branch: string, newName: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.renameBranch(owner, repo, branch, newName);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось переименовать ветку');
+        return false;
+      }
+      notify(`Ветка переименована в «${newName}»`);
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [pullRequests, setPullRequests] = useState<GitHubPR[]>([]);
+  const [selectedPR, setSelectedPR] = useState<GitHubPR | null>(null);
+  const [prOpen, setPrOpen] = useState(false);
+
+  const loadPullRequests = async (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => {
+    const result = await window.electronAPI?.github.getPullRequests(owner, repo, state);
+    if (result?.success && result.data) {
+      setPullRequests(result.data);
+    }
+  };
+
+  const getPullRequest = async (owner: string, repo: string, number: number): Promise<GitHubPR | null> => {
+    const result = await window.electronAPI?.github.getPullRequest(owner, repo, number);
+    if (result?.success && result.data) {
+      return result.data;
+    }
+    return null;
+  };
+
+  const createPullRequest = async (owner: string, repo: string, title: string, body: string, head: string, base: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.createPullRequest(owner, repo, title, body, head, base);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось создать pull request');
+        return false;
+      }
+      notify('Pull request создан');
+      await loadPullRequests(owner, repo);
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [issues, setIssues] = useState<GitHubIssue[]>([]);
+  const [selectedIssue, setSelectedIssue] = useState<GitHubIssue | null>(null);
+  const [issueOpen, setIssueOpen] = useState(false);
+
+  const loadIssues = async (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => {
+    const result = await window.electronAPI?.github.getIssues(owner, repo, state);
+    if (result?.success && result.data) {
+      setIssues(result.data.filter(issue => !issue.pull_request));
+    }
+  };
+
+  const getIssue = async (owner: string, repo: string, number: number): Promise<GitHubIssue | null> => {
+    const result = await window.electronAPI?.github.getIssue(owner, repo, number);
+    if (result?.success && result.data) {
+      return result.data;
+    }
+    return null;
+  };
+
+  const createIssue = async (owner: string, repo: string, title: string, body: string, labels?: string[]): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.createIssue(owner, repo, title, body, labels);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось создать задачу');
+        return false;
+      }
+      notify('Задача создана');
+      await loadIssues(owner, repo);
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchCommits = async (owner: string, repo: string, query: string, author?: string, since?: string, until?: string): Promise<GitHubCommit[]> => {
+    const result = await window.electronAPI?.github.searchCommits(owner, repo, query, author, since, until);
+    if (result?.success && result.data) {
+      return result.data;
+    }
+    return [];
+  };
+
   const selectUploadFolder = async (): Promise<UploadFolderSummary | null> => {
     if (!window.electronAPI) return null;
     const result = await window.electronAPI.app.selectUploadFolder();
@@ -276,6 +467,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
+    applyThemePreference(readThemePreference(localStorage.getItem('gitora-settings')));
     const restore = async () => {
       if (!window.electronAPI) {
         setLoginOpen(true);
@@ -304,6 +496,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const syncTheme = () => applyThemePreference(readThemePreference(localStorage.getItem('gitora-settings')));
+    media.addEventListener('change', syncTheme);
+    window.addEventListener('storage', syncTheme);
+    return () => {
+      media.removeEventListener('change', syncTheme);
+      window.removeEventListener('storage', syncTheme);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!project || !connected || !window.electronAPI) return;
     const currentRequest = ++requestId.current;
     const [owner, repo] = project.repo.split('/');
@@ -327,7 +530,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         name: branch.name,
         tipSha: branch.commit.sha,
         color: branch.name === 'main' || branch.name === 'master'
-          ? '#261732'
+          ? 'var(--branch-main)'
           : BRANCH_COLORS[(index + 1) % BRANCH_COLORS.length],
       }));
       const layout = computeGraphLayout(repository.commits, nextBranches);
@@ -351,6 +554,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       branchFilter,
       mobileOpen,
       createOpen,
+      editOpen,
+      branchOpen,
+      settingsOpen,
       loginOpen,
       updatesOpen,
       toast,
@@ -369,12 +575,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setBranchFilter,
       setMobileOpen,
       setCreateOpen,
+      setEditOpen,
+      setBranchOpen,
+      setSettingsOpen,
       setLoginOpen,
       setUpdatesOpen,
       notify,
       login,
       logout,
       createRepo,
+      deleteRepo,
+      updateRepo,
+      createBranch,
+      deleteBranch,
+      renameBranch,
+      pullRequests,
+      selectedPR,
+      setSelectedPR,
+      prOpen,
+      setPrOpen,
+      loadPullRequests,
+      getPullRequest,
+      createPullRequest,
+      issues,
+      selectedIssue,
+      setSelectedIssue,
+      issueOpen,
+      setIssueOpen,
+      loadIssues,
+      getIssue,
+      createIssue,
+      searchCommits,
       selectUploadFolder,
       clearUploadFolder,
       openExternal,

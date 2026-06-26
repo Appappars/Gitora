@@ -30,7 +30,7 @@ export const Graph: React.FC = () => {
 
   if (!graphLayout || graphLayout.nodes.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center min-w-0 bg-[#F7F3EE]">
+      <div className="flex-1 flex items-center justify-center min-w-0 bg-[var(--graph-bg)]">
         <p className="text-sm text-[#7D7482]">Нет данных для отображения</p>
       </div>
     );
@@ -40,7 +40,7 @@ export const Graph: React.FC = () => {
   const viewBoxHeight = graphLayout.totalHeight;
 
   return (
-    <div className="flex-1 min-w-0 bg-[#F7F3EE] relative" style={{ isolation: 'isolate' }}>
+    <div className="flex-1 min-w-0 bg-[var(--graph-bg)] relative" style={{ isolation: 'isolate' }}>
       <div
         className="relative"
         style={{ width: viewBoxWidth, height: viewBoxHeight }}
@@ -48,7 +48,7 @@ export const Graph: React.FC = () => {
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: 'radial-gradient(rgba(38,23,50,.13) .75px, transparent .75px)',
+            backgroundImage: 'radial-gradient(var(--graph-dot) .75px, transparent .75px)',
             backgroundSize: '18px 18px',
             maskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)',
           }}
@@ -65,7 +65,7 @@ export const Graph: React.FC = () => {
             <path
               key={`${edge.from}-${edge.to}-${index}`}
               d={generateEdgePath(edge)}
-              className="fill-none stroke-[3px] stroke-linecap-round"
+              className="fill-none stroke-[3.5px] stroke-linecap-round opacity-95"
               stroke={edge.color}
               style={{ vectorEffect: 'non-scaling-stroke' }}
             />
@@ -114,7 +114,7 @@ export const Graph: React.FC = () => {
           return (
             <div
               key={branch.name}
-              className="absolute font-mono text-[8px] font-medium px-[7px] py-1 rounded bg-white border border-[rgba(38,23,50,.12)] flex items-center gap-1.5 whitespace-nowrap"
+              className="absolute font-mono text-[8px] font-medium px-[7px] py-1 rounded bg-white border border-[rgba(38,23,50,.12)] shadow-sm flex items-center gap-1.5 whitespace-nowrap"
               style={{
                 top: Math.max(20, branchNode.y - 25),
                 left: branchNode.x,

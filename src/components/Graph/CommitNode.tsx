@@ -31,8 +31,8 @@ export const CommitNode: React.FC<CommitNodeProps> = ({
       aria-label={`${commit.label}, ${commit.author}, ${commit.time}`}
     >
       <span
-        className={`w-4 h-4 rounded-full border-2 border-white grid place-items-center text-white transition-transform ${isSelected ? 'scale-125 shadow-lg' : 'hover:scale-125'}`}
-        style={{ backgroundColor: branchColor }}
+        className={`w-4 h-4 rounded-full border-2 border-[var(--graph-node-ring)] grid place-items-center transition-transform ${isSelected ? 'scale-125 shadow-lg' : 'hover:scale-125'}`}
+        style={{ backgroundColor: branchColor, color: '#261732' }}
       >
         {commit.merge && <GitMerge size={11} />}
       </span>

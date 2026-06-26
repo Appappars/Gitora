@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Download, ExternalLink, Package, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -25,8 +25,18 @@ export const UpdatesModal: React.FC = () => {
     downloadRelease,
     notify,
   } = useApp();
+  const [closing, setClosing] = useState(false);
 
   if (!updatesOpen) return null;
+
+  const close = () => {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(() => {
+      setUpdatesOpen(false);
+      setClosing(false);
+    }, 150);
+  };
 
   const handleDownload = async (url: string, fileName: string) => {
     const filePath = await downloadRelease(url, fileName);
@@ -37,10 +47,11 @@ export const UpdatesModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 bg-[rgba(38,23,50,.58)] backdrop-blur-sm grid place-items-center z-50 p-4"
-      onMouseDown={(e) => e.target === e.currentTarget && setUpdatesOpen(false)}
+      className="modal-overlay fixed inset-0 backdrop-blur-sm grid place-items-center z-50 p-4"
+      data-closing={closing}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
-      <div className="w-[min(560px,100%)] max-h-[80vh] bg-white rounded-2xl shadow-[0_18px_50px_rgba(38,23,50,.13)] flex flex-col">
+      <div className="modal-panel w-[min(560px,100%)] max-h-[80vh] rounded-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(38,23,50,.12)]">
           <div className="flex items-center gap-3">
             <Package size={20} className="text-[#261732]" />
@@ -51,7 +62,7 @@ export const UpdatesModal: React.FC = () => {
           </div>
           <button
             className="w-8 h-8 grid place-items-center rounded-lg hover:bg-[#F3EFE9]"
-            onClick={() => setUpdatesOpen(false)}
+            onClick={close}
           >
             <X size={18} />
           </button>
@@ -77,12 +88,12 @@ export const UpdatesModal: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-sm">{release.name || release.tag}</h3>
                         {isCurrentVersion && (
-                          <span className="text-[9px] font-bold bg-[#AEA989] text-white px-2 py-0.5 rounded-full">
+                          <span className="text-[9px] font-bold bg-[#AEA989] text-[#261732] px-2 py-0.5 rounded-full">
                             ТЕКУЩАЯ
                           </span>
                         )}
                         {release.prerelease && (
-                          <span className="text-[9px] font-bold bg-[#C58C75] text-white px-2 py-0.5 rounded-full">
+                          <span className="text-[9px] font-bold bg-[#C58C75] text-[#261732] px-2 py-0.5 rounded-full">
                             ПРЕРЕЛИЗ
                           </span>
                         )}

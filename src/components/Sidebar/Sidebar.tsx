@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, Download, GitBranch, Github, LogOut, Plus, X } from 'lucide-react';
+import { ChevronDown, Download, GitBranch, Github, LogOut, Plus, Settings, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ProjectList } from './ProjectList';
 
@@ -9,6 +9,7 @@ export const Sidebar: React.FC = () => {
     setMobileOpen,
     setCreateOpen,
     setLoginOpen,
+    setSettingsOpen,
     setUpdatesOpen,
     user,
     connected,
@@ -69,7 +70,7 @@ export const Sidebar: React.FC = () => {
 
       {connected && (
         <button
-          className="mx-3 mt-2.5 border border-dashed border-[rgba(231,224,214,.18)] rounded-lg h-9 flex items-center justify-center gap-2 text-[10px] text-[rgba(231,224,214,.65)]"
+          className="mx-4 mt-4 mb-3 border border-dashed border-[rgba(231,224,214,.18)] rounded-lg h-10 flex items-center justify-center gap-2 text-[11px] text-[rgba(231,224,214,.72)] hover:text-[#E7E0D6] hover:bg-[rgba(231,224,214,.06)]"
           onClick={() => setCreateOpen(true)}
         >
           <Plus size={16} />
@@ -78,6 +79,13 @@ export const Sidebar: React.FC = () => {
       )}
 
       <div className="mt-auto p-3 border-t border-[rgba(231,224,214,.09)]">
+        <button
+          className="w-full flex items-center gap-2 text-left text-xs text-[rgba(231,224,214,.62)] py-2 hover:text-[#E7E0D6]"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <Settings size={16} />
+          Настройки
+        </button>
         <button
           className="w-full flex items-center gap-2 text-left text-xs text-[rgba(231,224,214,.62)] py-2 hover:text-[#E7E0D6]"
           onClick={() => setUpdatesOpen(true)}

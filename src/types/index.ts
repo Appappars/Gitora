@@ -6,6 +6,8 @@ export interface Project {
   commits: number;
   branches: number;
   updated: string;
+  description: string;
+  isPrivate: boolean;
 }
 
 export interface Commit {
@@ -74,6 +76,53 @@ export interface GitHubBranch {
   };
 }
 
+export interface GitHubPR {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  merged: boolean;
+  user: {
+    login: string;
+    avatar_url: string;
+  } | null;
+  head: {
+    ref: string;
+    sha: string;
+  };
+  base: {
+    ref: string;
+  };
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+}
+
+export interface GitHubIssue {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  user: {
+    login: string;
+    avatar_url: string;
+  } | null;
+  labels: {
+    name: string;
+    color: string;
+  }[];
+  assignees: {
+    login: string;
+    avatar_url: string;
+  }[];
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  pull_request?: unknown;
+}
+
 export interface GitHubApiResult<T> {
   success: boolean;
   data?: T;
@@ -128,6 +177,18 @@ export interface ElectronAPI {
       isPrivate: boolean,
       folderPath?: string,
     ) => Promise<GitHubApiResult<CreateRepositoryResult>>;
+    deleteRepo: (owner: string, repo: string) => Promise<GitHubApiResult<null>>;
+    updateRepo: (owner: string, repo: string, data: { name?: string; description?: string; private?: boolean }) => Promise<GitHubApiResult<GitHubRepo>>;
+    createBranch: (owner: string, repo: string, name: string, fromSha: string) => Promise<GitHubApiResult<GitHubBranch>>;
+    deleteBranch: (owner: string, repo: string, branch: string) => Promise<GitHubApiResult<null>>;
+    renameBranch: (owner: string, repo: string, branch: string, newName: string) => Promise<GitHubApiResult<GitHubBranch>>;
+    getPullRequests: (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => Promise<GitHubApiResult<GitHubPR[]>>;
+    getPullRequest: (owner: string, repo: string, number: number) => Promise<GitHubApiResult<GitHubPR>>;
+    createPullRequest: (owner: string, repo: string, title: string, body: string, head: string, base: string) => Promise<GitHubApiResult<GitHubPR>>;
+    getIssues: (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => Promise<GitHubApiResult<GitHubIssue[]>>;
+    getIssue: (owner: string, repo: string, number: number) => Promise<GitHubApiResult<GitHubIssue>>;
+    createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<GitHubApiResult<GitHubIssue>>;
+    searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubApiResult<GitHubCommit[]>>;
   };
   app: {
     getCurrentVersion: () => Promise<GitHubApiResult<string>>;

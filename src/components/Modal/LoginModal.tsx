@@ -5,23 +5,31 @@ import { useApp } from '../../context/AppContext';
 export const LoginModal: React.FC = () => {
   const { setLoginOpen, login, loading, openExternal } = useApp();
   const [token, setToken] = useState('');
+  const [closing, setClosing] = useState(false);
+
+  const close = () => {
+    if (loading || closing) return;
+    setClosing(true);
+    window.setTimeout(() => setLoginOpen(false), 150);
+  };
 
   useEffect(() => {
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !loading) setLoginOpen(false);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !loading) close();
     };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [loading, setLoginOpen]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [loading, close]);
 
   return (
     <div
-      className="fixed inset-0 bg-[rgba(38,23,50,.7)] backdrop-blur-sm grid place-items-center z-50 p-3 sm:p-5"
+      className="modal-overlay fixed inset-0 backdrop-blur-sm grid place-items-center z-50 p-3 sm:p-5"
+      data-closing={closing}
       role="presentation"
-      onMouseDown={(event) => event.target === event.currentTarget && !loading && setLoginOpen(false)}
+      onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
       <div
-        className="w-[min(480px,100%)] max-h-[calc(100vh-24px)] overflow-auto bg-white rounded-2xl p-6 sm:p-8 relative shadow-[0_18px_50px_rgba(38,23,50,.25)]"
+        className="modal-panel w-[min(480px,100%)] max-h-[calc(100vh-24px)] overflow-auto rounded-2xl p-6 sm:p-8 relative"
         role="dialog"
         aria-modal="true"
         aria-labelledby="login-title"
@@ -30,7 +38,7 @@ export const LoginModal: React.FC = () => {
           className="absolute right-4 top-4 w-8 h-8 grid place-items-center text-[#7D7482]"
           aria-label="Закрыть"
           disabled={loading}
-          onClick={() => setLoginOpen(false)}
+          onClick={close}
         >
           <X size={19} />
         </button>
@@ -59,7 +67,7 @@ export const LoginModal: React.FC = () => {
               value={token}
               onChange={(event) => setToken(event.target.value)}
               placeholder="github_pat_…"
-              className="block w-full h-11 border border-[rgba(38,23,50,.15)] bg-[#F3EFE9] rounded-lg px-4 text-sm font-mono"
+              className="focus-surface block w-full h-11 border border-[rgba(38,23,50,.15)] bg-[#F3EFE9] rounded-lg px-4 text-sm font-mono"
             />
           </label>
 
@@ -79,7 +87,7 @@ export const LoginModal: React.FC = () => {
           </div>
 
           <p className="mt-3 text-xs text-[#7D7482]">
-            Нужны права: <code className="bg-[#F3EFE9] px-1.5 py-0.5 rounded text-[10px]">repo</code>, <code className="bg-[#F3EFE9] px-1.5 py-0.5 rounded text-[10px]">read:user</code>
+            Нужны права: <code className="bg-[#F3EFE9] px-1.5 py-0.5 rounded text-[10px]">repo</code>, <code className="bg-[#F3EFE9] px-1.5 py-0.5 rounded text-[10px]">read:user</code>, <code className="bg-[#F3EFE9] px-1.5 py-0.5 rounded text-[10px]">delete_repo</code>
           </p>
 
           <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6">
@@ -87,7 +95,7 @@ export const LoginModal: React.FC = () => {
               type="button"
               className="flex-1 h-11 border border-[rgba(38,23,50,.15)] rounded-lg text-sm font-semibold"
               disabled={loading}
-              onClick={() => setLoginOpen(false)}
+              onClick={close}
             >
               Отмена
             </button>

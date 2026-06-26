@@ -1,20 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   ChevronRight,
+  CircleDot,
   Code2,
   ExternalLink,
   GitBranch,
   GitCommitHorizontal,
+  GitPullRequest,
   History,
   Link2,
   Menu,
+  Pencil,
+  Settings,
 } from 'lucide-react';
 import { useApp } from './context/AppContext';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { Graph } from './components/Graph/Graph';
 import { DetailPanel } from './components/DetailPanel/DetailPanel';
+import { PRList } from './components/PR/PRList';
+import { PRDetail } from './components/PR/PRDetail';
+import { IssueList } from './components/Issue/IssueList';
+import { IssueDetail } from './components/Issue/IssueDetail';
+import { SearchBar } from './components/Search/SearchBar';
 import { CreateModal } from './components/Modal/CreateModal';
+import { EditModal } from './components/Modal/EditModal';
+import { BranchModal } from './components/Modal/BranchModal';
+import { CreatePRModal } from './components/Modal/CreatePRModal';
+import { CreateIssueModal } from './components/Modal/CreateIssueModal';
+import { SettingsModal } from './components/Modal/SettingsModal';
 import { LoginModal } from './components/Modal/LoginModal';
 import { UpdatesModal } from './components/Modal/UpdatesModal';
 import { Toast } from './components/common/Toast';
@@ -25,6 +39,13 @@ export const App: React.FC = () => {
     mobileOpen,
     setMobileOpen,
     createOpen,
+    editOpen,
+    setEditOpen,
+    branchOpen,
+    setBranchOpen,
+    prOpen,
+    settingsOpen,
+    issueOpen,
     loginOpen,
     branchFilter,
     setBranchFilter,
@@ -41,6 +62,8 @@ export const App: React.FC = () => {
     openExternal,
   } = useApp();
 
+  const [activeTab, setActiveTab] = useState<'graph' | 'pr' | 'issues'>('graph');
+
   const copyRepositoryUrl = async () => {
     if (!project) return;
     await navigator.clipboard.writeText(`https://github.com/${project.repo}`);
@@ -48,7 +71,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F3EFE9] text-[#261732]">
+    <div className="min-h-screen bg-[var(--app-bg)] text-[var(--ink)]">
       <Sidebar />
 
       {mobileOpen && (
@@ -60,7 +83,7 @@ export const App: React.FC = () => {
       )}
 
       <main className="md:ml-60 min-w-0 min-h-screen flex flex-col">
-        <header className="h-[58px] border-b border-[rgba(38,23,50,.12)] flex items-center gap-2 px-3 sm:px-6 bg-[rgba(243,239,233,.92)] backdrop-blur-[14px] sticky top-0 z-10">
+        <header className="h-[58px] border-b border-[rgba(38,23,50,.12)] flex items-center gap-2 px-3 sm:px-6 bg-[var(--header-bg)] text-[var(--ink)] backdrop-blur-[14px] sticky top-0 z-10">
           <button
             className="md:hidden w-8 h-8 flex-none grid place-items-center rounded-lg"
             aria-label="Открыть меню"
@@ -132,10 +155,17 @@ export const App: React.FC = () => {
                   </span>
                   <span className="truncate">{project.repo}</span>
                 </div>
-                <h1 className="text-[28px] sm:text-[32px] leading-none tracking-tight mt-3 mb-2 truncate">{project.name}</h1>
+                <h1 className="text-[28px] sm:text-[32px] leading-none tracking-tight mt-3 mb-2 truncate text-balance">{project.name}</h1>
                 <p className="text-[11px] text-[#7D7482]">История проекта и связи между ветками.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil size={17} />
+                  Редактировать
+                </button>
                 <button
                   className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
                   onClick={() => void copyRepositoryUrl()}
@@ -163,38 +193,93 @@ export const App: React.FC = () => {
                 <div key={String(label)} className={`flex items-center gap-3 sm:px-4 ${index < 2 ? 'sm:border-r sm:border-[rgba(38,23,50,.12)]' : ''}`}>
                   <span className="text-[#7D7482]">{icon}</span>
                   <span>
-                    <b className="block text-sm">{value}</b>
+                    <b className="block text-sm tabular-nums">{value}</b>
                     <small className="block text-[10px] text-[#7D7482]">{label}</small>
                   </span>
                 </div>
               ))}
             </section>
 
+            <section className="mx-4 sm:mx-8 mb-4">
+              <SearchBar owner={project.repo.split('/')[0]} repo={project.repo.split('/')[1]} />
+            </section>
+
             <section className="mx-4 sm:mx-8 mb-4 border border-[rgba(38,23,50,.12)] rounded-xl bg-white min-h-[500px] flex flex-col flex-1">
               <div className="min-h-[52px] border-b border-[rgba(38,23,50,.12)] rounded-t-xl flex items-center justify-between gap-3 px-4 py-2">
-                <b className="text-xs">Граф коммитов</b>
-                {branches.length > 0 && (
-                  <label className="h-[34px] border border-[rgba(38,23,50,.12)] rounded-lg flex items-center px-2.5 gap-1.5 bg-white">
-                    <GitBranch size={15} />
-                    <span className="sr-only">Фильтр ветки</span>
-                    <select
-                      value={branchFilter}
-                      onChange={(event) => setBranchFilter(event.target.value)}
-                      className="max-w-36 border-0 bg-transparent text-[10px] font-bold outline-none"
+                <div className="flex items-center gap-1">
+                  <button
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'graph' ? 'bg-[#261732] text-[#E7E0D6]' : 'text-[#7D7482] hover:bg-[#F3EFE9]'}`}
+                    onClick={() => setActiveTab('graph')}
+                  >
+                    <GitCommitHorizontal size={14} className="inline mr-1.5" />
+                    Граф
+                  </button>
+                  <button
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'pr' ? 'bg-[#261732] text-[#E7E0D6]' : 'text-[#7D7482] hover:bg-[#F3EFE9]'}`}
+                    onClick={() => setActiveTab('pr')}
+                  >
+                    <GitPullRequest size={14} className="inline mr-1.5" />
+                    Pull Requests
+                  </button>
+                  <button
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'issues' ? 'bg-[#261732] text-[#E7E0D6]' : 'text-[#7D7482] hover:bg-[#F3EFE9]'}`}
+                    onClick={() => setActiveTab('issues')}
+                  >
+                    <CircleDot size={14} className="inline mr-1.5" />
+                    Задачи
+                  </button>
+                </div>
+                {activeTab === 'graph' && (
+                  <div className="flex items-center gap-2">
+                    {branches.length > 0 && (
+                      <label className="h-[34px] border border-[rgba(38,23,50,.12)] rounded-lg flex items-center px-2.5 gap-1.5 bg-white">
+                        <GitBranch size={15} />
+                        <span className="sr-only">Фильтр ветки</span>
+                        <select
+                          value={branchFilter}
+                          onChange={(event) => setBranchFilter(event.target.value)}
+                          className="max-w-36 border-0 bg-transparent text-[10px] font-bold outline-none"
+                        >
+                          <option value="all">Все ветки</option>
+                          {branches.map(branch => (
+                            <option key={branch.name} value={branch.name}>{branch.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <button
+                      className="h-[34px] border border-[rgba(38,23,50,.12)] rounded-lg flex items-center px-2.5 gap-1.5 bg-white hover:bg-[#F3EFE9]"
+                      onClick={() => setBranchOpen(true)}
+                      aria-label="Управление ветками"
                     >
-                      <option value="all">Все ветки</option>
-                      {branches.map(branch => (
-                        <option key={branch.name} value={branch.name}>{branch.name}</option>
-                      ))}
-                    </select>
-                  </label>
+                      <Settings size={15} />
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="flex min-h-[445px] flex-1">
-                <div className="flex-1 min-w-0 overflow-auto">
-                  <Graph />
-                </div>
-                <DetailPanel />
+                {activeTab === 'graph' ? (
+                  <>
+                    <div className="flex-1 min-w-0 overflow-auto">
+                      <Graph />
+                    </div>
+                    <DetailPanel />
+                  </>
+                ) : activeTab === 'pr' ? (
+                  <>
+                    <div className="flex-1 min-w-0 overflow-auto">
+                      <PRList owner={project.repo.split('/')[0]} repo={project.repo.split('/')[1]} />
+                    </div>
+                    <PRDetail />
+                  </>
+                ) : (
+                  <>
+                    <div className="flex-1 min-w-0 overflow-auto">
+                      <IssueList owner={project.repo.split('/')[0]} repo={project.repo.split('/')[1]} />
+                    </div>
+                    <IssueDetail />
+                  </>
+                )}
               </div>
             </section>
           </>
@@ -203,6 +288,30 @@ export const App: React.FC = () => {
 
       {loginOpen && <LoginModal />}
       {createOpen && <CreateModal />}
+      {editOpen && project && (
+        <EditModal
+          repoFullName={project.repo}
+          currentName={project.name}
+          currentDescription={project.description}
+          currentPrivate={project.isPrivate}
+        />
+      )}
+      {branchOpen && project && (
+        <BranchModal
+          branches={branches}
+          repoFullName={project.repo}
+        />
+      )}
+      {prOpen && project && (
+        <CreatePRModal
+          branches={branches}
+          repoFullName={project.repo}
+        />
+      )}
+      {issueOpen && project && (
+        <CreateIssueModal repoFullName={project.repo} />
+      )}
+      {settingsOpen && <SettingsModal />}
       <UpdatesModal />
       <Toast message={toast} />
 

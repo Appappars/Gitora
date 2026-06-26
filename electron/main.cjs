@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog } = require('electron');
+﻿const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 const ignore = require('ignore');
+const { githubErrorMessage } = require('./githubErrors.cjs');
 
 const isDev = process.argv.includes('--dev');
 const GITHUB_ORIGIN = 'https://github.com';
@@ -17,7 +18,7 @@ function tokenPath() {
 
 async function saveToken(token) {
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('Защищённое хранилище ОС недоступно');
+    throw new Error('Р—Р°С‰РёС‰С‘РЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РћРЎ РЅРµРґРѕСЃС‚СѓРїРЅРѕ');
   }
   const encrypted = safeStorage.encryptString(token).toString('base64');
   await fs.writeFile(tokenPath(), encrypted, { encoding: 'utf8', mode: 0o600 });
@@ -40,7 +41,7 @@ async function clearToken() {
 }
 
 function githubHeaders(token = githubToken) {
-  if (!token) throw new Error('GitHub не подключён');
+  if (!token) throw new Error('GitHub РЅРµ РїРѕРґРєР»СЋС‡С‘РЅ');
   return {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
@@ -63,9 +64,9 @@ async function githubRequest(endpoint, options = {}, token = githubToken) {
 
   const remaining = response.headers.get('x-ratelimit-remaining');
   if (response.status === 403 && remaining === '0') {
-    throw new Error('Лимит GitHub API исчерпан. Попробуйте позже');
+    throw new Error('Р›РёРјРёС‚ GitHub API РёСЃС‡РµСЂРїР°РЅ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ');
   }
-  throw new Error(data?.message || `GitHub API: ${response.status}`);
+  throw new Error(githubErrorMessage(response.status, data?.message, endpoint, options.method || 'GET'));
 }
 
 function validRepo(owner, repo) {
@@ -77,7 +78,7 @@ function result(handler) {
     try {
       return { success: true, data: await handler(...args) };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Неизвестная ошибка' };
+      return { success: false, error: error instanceof Error ? error.message : 'РќРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР°' };
     }
   };
 }
@@ -136,7 +137,7 @@ async function scanFolder(dirPath, ig, rootPath) {
       try {
         const stat = await fs.lstat(fullPath);
         if (stat.isSymbolicLink()) {
-          warnings.push(`Symlink пропущен: ${relativePath}`);
+          warnings.push(`Symlink РїСЂРѕРїСѓС‰РµРЅ: ${relativePath}`);
           continue;
         }
       } catch { continue; }
@@ -151,16 +152,16 @@ async function scanFolder(dirPath, ig, rootPath) {
       try {
         const stat = await fs.lstat(fullPath);
         if (stat.isSymbolicLink()) {
-          warnings.push(`Symlink пропущен: ${relativePath}`);
+          warnings.push(`Symlink РїСЂРѕРїСѓС‰РµРЅ: ${relativePath}`);
           continue;
         }
         if (stat.size > MAX_FILE_SIZE) {
-          warnings.push(`Файл >100 МБ пропущен: ${relativePath}`);
+          warnings.push(`Р¤Р°Р№Р» >100 РњР‘ РїСЂРѕРїСѓС‰РµРЅ: ${relativePath}`);
           continue;
         }
         totalBytes += stat.size;
         if (totalBytes > MAX_TOTAL_SIZE) {
-          warnings.push(`Общий размер превышает 1 ГБ`);
+          warnings.push(`РћР±С‰РёР№ СЂР°Р·РјРµСЂ РїСЂРµРІС‹С€Р°РµС‚ 1 Р“Р‘`);
         }
         files.push({ relativePath, fullPath, size: stat.size });
       } catch { continue; }
@@ -288,7 +289,7 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('github:login', result(async (_event, token) => {
   const cleanToken = typeof token === 'string' ? token.trim() : '';
-  if (!cleanToken) throw new Error('Введите GitHub-токен');
+  if (!cleanToken) throw new Error('Р’РІРµРґРёС‚Рµ GitHub-С‚РѕРєРµРЅ');
   const user = await githubRequest('/user', {}, cleanToken);
   await saveToken(cleanToken);
   githubToken = cleanToken;
@@ -315,7 +316,7 @@ ipcMain.handle('github:repos', result(async () => (
 )));
 
 ipcMain.handle('github:repository', result(async (_event, { owner, repo }) => {
-  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
   const [commits, branches] = await Promise.all([
     githubRequest(`/repos/${owner}/${repo}/commits?per_page=50`),
     githubRequest(`/repos/${owner}/${repo}/branches?per_page=100`),
@@ -325,7 +326,7 @@ ipcMain.handle('github:repository', result(async (_event, { owner, repo }) => {
 
 ipcMain.handle('github:create-repo', result(async (_event, input) => {
   const name = typeof input?.name === 'string' ? input.name.trim() : '';
-  if (!name || !REPO_PART.test(name)) throw new Error('Некорректное имя репозитория');
+  if (!name || !REPO_PART.test(name)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
   const repo = await githubRequest('/user/repos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -355,10 +356,121 @@ ipcMain.handle('github:create-repo', result(async (_event, input) => {
   }
 }));
 
+ipcMain.handle('github:delete-repo', result(async (_event, { owner, repo }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  await githubRequest(`/repos/${owner}/${repo}`, { method: 'DELETE' });
+  return null;
+}));
+
+ipcMain.handle('github:update-repo', result(async (_event, { owner, repo, data }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (data.name && !REPO_PART.test(data.name)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  return githubRequest(`/repos/${owner}/${repo}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}));
+
+ipcMain.handle('github:create-branch', result(async (_event, { owner, repo, name, fromSha }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!name || !REPO_PART.test(name)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
+  return githubRequest(`/repos/${owner}/${repo}/git/refs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ref: `refs/heads/${name}`,
+      sha: fromSha,
+    }),
+  });
+}));
+
+ipcMain.handle('github:delete-branch', result(async (_event, { owner, repo, branch }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!branch || !REPO_PART.test(branch)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
+  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, { method: 'DELETE' });
+  return null;
+}));
+
+ipcMain.handle('github:rename-branch', result(async (_event, { owner, repo, branch, newName }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!branch || !REPO_PART.test(branch)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
+  if (!newName || !REPO_PART.test(newName)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РЅРѕРІРѕРµ РёРјСЏ РІРµС‚РєРё');
+
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${branch}`);
+  return githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ref: `refs/heads/${newName}`,
+      sha: ref.object.sha,
+      force: true,
+    }),
+  });
+}));
+
+ipcMain.handle('github:pull-requests', result(async (_event, { owner, repo, state }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  const params = new URLSearchParams({ per_page: '30' });
+  if (state) params.set('state', state);
+  return githubRequest(`/repos/${owner}/${repo}/pulls?${params}`);
+}));
+
+ipcMain.handle('github:pull-request', result(async (_event, { owner, repo, number }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  return githubRequest(`/repos/${owner}/${repo}/pulls/${number}`);
+}));
+
+ipcMain.handle('github:create-pull-request', result(async (_event, { owner, repo, title, body, head, base }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!title) throw new Error('Р’РІРµРґРёС‚Рµ Р·Р°РіРѕР»РѕРІРѕРє pull request');
+  return githubRequest(`/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, body, head, base }),
+  });
+}));
+
+ipcMain.handle('github:issues', result(async (_event, { owner, repo, state }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  const params = new URLSearchParams({ per_page: '30' });
+  if (state) params.set('state', state);
+  return githubRequest(`/repos/${owner}/${repo}/issues?${params}`);
+}));
+
+ipcMain.handle('github:issue', result(async (_event, { owner, repo, number }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  return githubRequest(`/repos/${owner}/${repo}/issues/${number}`);
+}));
+
+ipcMain.handle('github:create-issue', result(async (_event, { owner, repo, title, body, labels }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!title) throw new Error('Р’РІРµРґРёС‚Рµ Р·Р°РіРѕР»РѕРІРѕРє Р·Р°РґР°С‡Рё');
+  const payload = { title, body };
+  if (labels && labels.length > 0) {
+    Object.assign(payload, { labels });
+  }
+  return githubRequest(`/repos/${owner}/${repo}/issues`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}));
+
+ipcMain.handle('github:search-commits', result(async (_event, { owner, repo, query, author, since, until }) => {
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  const params = new URLSearchParams({ per_page: '30' });
+  if (query) params.set('q', query);
+  if (author) params.set('author', author);
+  if (since) params.set('since', since);
+  if (until) params.set('until', until);
+  return githubRequest(`/repos/${owner}/${repo}/commits?${params}`);
+}));
+
 ipcMain.handle('app:select-upload-folder', result(async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
-    title: 'Выберите папку проекта',
+    title: 'Р’С‹Р±РµСЂРёС‚Рµ РїР°РїРєСѓ РїСЂРѕРµРєС‚Р°',
   });
 
   if (result.canceled || result.filePaths.length === 0) return null;
@@ -375,7 +487,7 @@ ipcMain.handle('app:clear-upload-folder', result(async () => {
 }));
 
 ipcMain.handle('open-external', result(async (_event, url) => {
-  if (!isAllowedExternal(url)) throw new Error('Разрешены только ссылки github.com');
+  if (!isAllowedExternal(url)) throw new Error('Р Р°Р·СЂРµС€РµРЅС‹ С‚РѕР»СЊРєРѕ СЃСЃС‹Р»РєРё github.com');
   await shell.openExternal(url);
   return null;
 }));
@@ -403,7 +515,7 @@ ipcMain.handle('app:get-releases', result(async () => {
 
 ipcMain.handle('app:download-release', result(async (_event, { url, fileName }) => {
   const response = await fetch(url);
-  if (!response.ok) throw new Error('Не удалось скачать файл');
+  if (!response.ok) throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ С„Р°Р№Р»');
 
   const downloadsPath = app.getPath('downloads');
   const filePath = path.join(downloadsPath, fileName);
@@ -415,14 +527,14 @@ ipcMain.handle('app:download-release', result(async (_event, { url, fileName }) 
 }));
 
 ipcMain.handle('app:download-archive', result(async (_event, { owner, repo, sha }) => {
-  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
 
   const url = `${GITHUB_ORIGIN}/${owner}/${repo}/archive/${sha}.zip`;
   const response = await fetch(url, {
     headers: githubToken ? { Authorization: `Bearer ${githubToken}` } : {},
   });
 
-  if (!response.ok) throw new Error('Не удалось скачать архив');
+  if (!response.ok) throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ Р°СЂС…РёРІ');
 
   const fileName = `${repo}-${sha.slice(0, 7)}.zip`;
   const downloadsPath = app.getPath('downloads');
