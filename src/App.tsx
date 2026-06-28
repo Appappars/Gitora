@@ -260,7 +260,7 @@ export const App: React.FC = () => {
               <div className="flex min-h-[445px] flex-1">
                 {activeTab === 'graph' ? (
                   <>
-                    <div className="flex-1 min-w-0 overflow-auto">
+                    <div className="flex-1 min-w-0 min-h-0 overflow-auto">
                       <Graph />
                     </div>
                     <DetailPanel />

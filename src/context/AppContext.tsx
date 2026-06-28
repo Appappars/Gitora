@@ -10,6 +10,7 @@ import {
   Branch,
   Commit,
   CreateRepositoryResult,
+  DownloadOptions,
   GitHubCommit,
   GitHubIssue,
   GitHubPR,
@@ -95,6 +96,21 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const PROJECT_COLORS = ['#AEA989', '#8E7CA3', '#C58C75', '#5D7659'];
 const BRANCH_COLORS = ['var(--branch-main)', 'var(--branch-1)', 'var(--branch-2)', 'var(--branch-3)', 'var(--branch-4)', 'var(--branch-5)'];
 
+function readDownloadOptions(): DownloadOptions {
+  try {
+    const settings = JSON.parse(localStorage.getItem('gitora-settings') || '{}') as {
+      downloadMode?: DownloadOptions['mode'];
+      downloadDirectory?: string;
+    };
+    return {
+      mode: settings.downloadMode || 'downloads',
+      directory: settings.downloadDirectory || '',
+    };
+  } catch {
+    return { mode: 'downloads', directory: '' };
+  }
+}
+
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) throw new Error('useApp must be used within an AppProvider');
@@ -159,7 +175,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [error, setError] = useState<string | null>(null);
   const [graphLayout, setGraphLayout] = useState<GraphLayoutResult | null>(null);
   const [releases, setReleases] = useState<Release[]>([]);
-  const [currentVersion, setCurrentVersion] = useState('0.1.4');
+  const [currentVersion, setCurrentVersion] = useState('0.1.10');
   const toastTimer = useRef<number | undefined>(undefined);
   const requestId = useRef(0);
   const initialized = useRef(false);
@@ -433,11 +449,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     setLoading(true);
     try {
-      const result = await window.electronAPI.app.downloadRelease(url, fileName);
+      const result = await window.electronAPI.app.downloadRelease(url, fileName, readDownloadOptions());
       if (result?.success && result.data) {
         notify(`Файл ${fileName} загружен`);
         return result.data;
       }
+      if (result?.success && result.data === null) return null;
       showError(result?.error || 'Не удалось загрузить файл');
       return null;
     } finally {
@@ -452,11 +469,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     setLoading(true);
     try {
-      const result = await window.electronAPI.app.downloadArchive(owner, repo, sha);
+      const result = await window.electronAPI.app.downloadArchive(owner, repo, sha, readDownloadOptions());
       if (result?.success && result.data) {
         notify('Архив скачан');
         return result.data;
       }
+      if (result?.success && result.data === null) return null;
       showError(result?.error || 'Не удалось скачать архив');
       return null;
     } finally {

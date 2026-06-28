@@ -164,6 +164,11 @@ export interface CreateRepositoryResult {
   skippedCount: number;
 }
 
+export interface DownloadOptions {
+  mode?: 'downloads' | 'defaultFolder' | 'ask';
+  directory?: string;
+}
+
 export interface ElectronAPI {
   github: {
     login: (token: string) => Promise<GitHubApiResult<GitHubUser>>;
@@ -193,10 +198,11 @@ export interface ElectronAPI {
   app: {
     getCurrentVersion: () => Promise<GitHubApiResult<string>>;
     getReleases: () => Promise<GitHubApiResult<Release[]>>;
-    downloadRelease: (url: string, fileName: string) => Promise<GitHubApiResult<string>>;
-    downloadArchive: (owner: string, repo: string, sha: string) => Promise<GitHubApiResult<string>>;
+    downloadRelease: (url: string, fileName: string, options?: DownloadOptions) => Promise<GitHubApiResult<string | null>>;
+    downloadArchive: (owner: string, repo: string, sha: string, options?: DownloadOptions) => Promise<GitHubApiResult<string | null>>;
     selectUploadFolder: () => Promise<GitHubApiResult<UploadFolderSummary | null>>;
     clearUploadFolder: () => Promise<GitHubApiResult<null>>;
+    selectDownloadFolder: () => Promise<GitHubApiResult<string | null>>;
   };
   openExternal: (url: string) => Promise<GitHubApiResult<null>>;
 }

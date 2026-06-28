@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Palette, Settings, X } from 'lucide-react';
+import { FolderOpen, Palette, Settings, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { applyThemePreference, ThemePreference } from '../../lib/theme';
 
 interface Settings {
   theme: ThemePreference;
   commitLimit: number;
+  downloadMode: 'downloads' | 'defaultFolder' | 'ask';
+  downloadDirectory: string;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
   commitLimit: 50,
+  downloadMode: 'downloads',
+  downloadDirectory: '',
 };
 
 export const SettingsModal: React.FC = () => {
@@ -46,6 +50,23 @@ export const SettingsModal: React.FC = () => {
     applyThemePreference(settings.theme);
     notify('Настройки сохранены');
     close();
+  };
+
+  const selectDownloadFolder = async () => {
+    if (!window.electronAPI) {
+      notify('Выбор папки доступен в приложении Gitora');
+      return;
+    }
+    const result = await window.electronAPI.app.selectDownloadFolder();
+    if (result?.success && result.data) {
+      setSettings({
+        ...settings,
+        downloadMode: 'defaultFolder',
+        downloadDirectory: result.data,
+      });
+    } else if (result?.error) {
+      notify(result.error);
+    }
   };
 
   return (
@@ -109,11 +130,60 @@ export const SettingsModal: React.FC = () => {
             </select>
           </div>
 
+          <div>
+            <label className="text-xs font-bold block mb-2">Папка для скачивания версий</label>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                className={`min-h-[42px] border rounded-lg px-3 text-sm text-left flex items-center justify-between gap-3 ${settings.downloadMode === 'downloads' ? 'bg-[#E7E0D6] border-[#AEA989]' : 'border-[rgba(38,23,50,.12)]'}`}
+                onClick={() => setSettings({ ...settings, downloadMode: 'downloads' })}
+              >
+                <span>
+                  <b className="block text-xs">Системная папка загрузок</b>
+                  <small className="block text-[10px] text-[#7D7482] mt-0.5">Файлы сохраняются в Downloads</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`min-h-[42px] border rounded-lg px-3 text-sm text-left flex items-center justify-between gap-3 ${settings.downloadMode === 'ask' ? 'bg-[#E7E0D6] border-[#AEA989]' : 'border-[rgba(38,23,50,.12)]'}`}
+                onClick={() => setSettings({ ...settings, downloadMode: 'ask' })}
+              >
+                <span>
+                  <b className="block text-xs">Спрашивать каждый раз</b>
+                  <small className="block text-[10px] text-[#7D7482] mt-0.5">Перед скачиванием откроется окно сохранения</small>
+                </span>
+              </button>
+              <div className={`border rounded-lg p-3 ${settings.downloadMode === 'defaultFolder' ? 'bg-[#E7E0D6] border-[#AEA989]' : 'border-[rgba(38,23,50,.12)]'}`}>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="h-9 px-3 bg-[#261732] text-[#E7E0D6] rounded-lg text-[11px] font-semibold flex items-center gap-2"
+                    onClick={() => void selectDownloadFolder()}
+                  >
+                    <FolderOpen size={15} />
+                    Выбрать папку
+                  </button>
+                  <button
+                    type="button"
+                    className="h-9 px-3 border border-[rgba(38,23,50,.12)] rounded-lg text-[11px] font-semibold"
+                    onClick={() => setSettings({ ...settings, downloadMode: 'defaultFolder' })}
+                    disabled={!settings.downloadDirectory}
+                  >
+                    Использовать
+                  </button>
+                </div>
+                <p className="mt-2 text-[10px] text-[#7D7482] break-all">
+                  {settings.downloadDirectory || 'Папка по умолчанию не выбрана'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="pt-4 border-t border-[rgba(38,23,50,.08)]">
             <h3 className="text-xs font-bold mb-2">О приложении</h3>
             <div className="text-[11px] text-[#7D7482] space-y-1">
               <p>Gitora — визуальный граф истории Git</p>
-              <p>Версия: 0.1.8</p>
+              <p>Версия: 0.1.10</p>
               <p>Разработано совместно Sabinchous и Appappars</p>
             </div>
           </div>

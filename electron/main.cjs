@@ -177,6 +177,25 @@ async function scanUploadFolder(dirPath) {
   return { path: dirPath, fileCount: files.length, totalBytes, warnings, files };
 }
 
+async function resolveDownloadPath(fileName, options = {}) {
+  const safeFileName = path.basename(String(fileName || 'download'));
+
+  if (options?.mode === 'ask') {
+    const saveResult = await dialog.showSaveDialog(mainWindow, {
+      title: 'Р’С‹Р±РµСЂРёС‚Рµ, РєСѓРґР° СЃРѕС…СЂР°РЅРёС‚СЊ С„Р°Р№Р»',
+      defaultPath: path.join(app.getPath('downloads'), safeFileName),
+    });
+    if (saveResult.canceled || !saveResult.filePath) return null;
+    return saveResult.filePath;
+  }
+
+  const directory = options?.mode === 'defaultFolder' && typeof options.directory === 'string' && options.directory.trim()
+    ? options.directory.trim()
+    : app.getPath('downloads');
+  await fs.mkdir(directory, { recursive: true });
+  return path.join(directory, safeFileName);
+}
+
 async function uploadFolderToRepo(owner, repo, folderData) {
   const { files } = folderData;
   if (files.length === 0) return { uploadedCount: 0, skippedCount: 0, status: 'success' };
@@ -486,6 +505,16 @@ ipcMain.handle('app:clear-upload-folder', result(async () => {
   return null;
 }));
 
+ipcMain.handle('app:select-download-folder', result(async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Р’С‹Р±РµСЂРёС‚Рµ РїР°РїРєСѓ РґР»СЏ СЃРєР°С‡РёРІР°РЅРёР№',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+}));
+
 ipcMain.handle('open-external', result(async (_event, url) => {
   if (!isAllowedExternal(url)) throw new Error('Р Р°Р·СЂРµС€РµРЅС‹ С‚РѕР»СЊРєРѕ СЃСЃС‹Р»РєРё github.com');
   await shell.openExternal(url);
@@ -513,12 +542,12 @@ ipcMain.handle('app:get-releases', result(async () => {
   }));
 }));
 
-ipcMain.handle('app:download-release', result(async (_event, { url, fileName }) => {
+ipcMain.handle('app:download-release', result(async (_event, { url, fileName, options }) => {
   const response = await fetch(url);
   if (!response.ok) throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ С„Р°Р№Р»');
 
-  const downloadsPath = app.getPath('downloads');
-  const filePath = path.join(downloadsPath, fileName);
+  const filePath = await resolveDownloadPath(fileName, options);
+  if (!filePath) return null;
 
   const buffer = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(filePath, buffer);
@@ -526,7 +555,7 @@ ipcMain.handle('app:download-release', result(async (_event, { url, fileName }) 
   return filePath;
 }));
 
-ipcMain.handle('app:download-archive', result(async (_event, { owner, repo, sha }) => {
+ipcMain.handle('app:download-archive', result(async (_event, { owner, repo, sha, options }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
 
   const url = `${GITHUB_ORIGIN}/${owner}/${repo}/archive/${sha}.zip`;
@@ -537,8 +566,8 @@ ipcMain.handle('app:download-archive', result(async (_event, { owner, repo, sha 
   if (!response.ok) throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ Р°СЂС…РёРІ');
 
   const fileName = `${repo}-${sha.slice(0, 7)}.zip`;
-  const downloadsPath = app.getPath('downloads');
-  const filePath = path.join(downloadsPath, fileName);
+  const filePath = await resolveDownloadPath(fileName, options);
+  if (!filePath) return null;
 
   const buffer = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(filePath, buffer);
