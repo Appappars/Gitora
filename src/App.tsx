@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  BookOpen,
   Box,
   ChevronRight,
   CircleDot,
@@ -7,6 +8,7 @@ import {
   ExternalLink,
   GitBranch,
   GitCommitHorizontal,
+  GitCompare,
   GitPullRequest,
   History,
   Link2,
@@ -30,6 +32,8 @@ import { BranchModal } from './components/Modal/BranchModal';
 import { CreatePRModal } from './components/Modal/CreatePRModal';
 import { CreateIssueModal } from './components/Modal/CreateIssueModal';
 import { CreateReleaseModal } from './components/Modal/CreateReleaseModal';
+import { ReadmeModal } from './components/Modal/ReadmeModal';
+import { ChangesModal } from './components/Modal/ChangesModal';
 import { SettingsModal } from './components/Modal/SettingsModal';
 import { LoginModal } from './components/Modal/LoginModal';
 import { UpdatesModal } from './components/Modal/UpdatesModal';
@@ -49,6 +53,8 @@ export const App: React.FC = () => {
     settingsOpen,
     issueOpen,
     releaseOpen,
+    readmeOpen,
+    changesOpen,
     loginOpen,
     branchFilter,
     setBranchFilter,
@@ -63,6 +69,8 @@ export const App: React.FC = () => {
     commits,
     setLoginOpen,
     setReleaseOpen,
+    setReadmeOpen,
+    setChangesOpen,
     openExternal,
   } = useApp();
 
@@ -169,6 +177,20 @@ export const App: React.FC = () => {
                 >
                   <Pencil size={17} />
                   Редактировать
+                </button>
+                <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
+                  onClick={() => setReadmeOpen(true)}
+                >
+                  <BookOpen size={17} />
+                  README
+                </button>
+                <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
+                  onClick={() => setChangesOpen(true)}
+                >
+                  <GitCompare size={17} />
+                  Изменения
                 </button>
                 <button
                   className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
@@ -311,6 +333,7 @@ export const App: React.FC = () => {
         <BranchModal
           branches={branches}
           repoFullName={project.repo}
+          defaultBranch={project.defaultBranch}
         />
       )}
       {prOpen && project && (
@@ -326,6 +349,21 @@ export const App: React.FC = () => {
         <CreateReleaseModal
           branches={branches}
           repoFullName={project.repo}
+          defaultBranch={project.defaultBranch}
+        />
+      )}
+      {readmeOpen && project && (
+        <ReadmeModal
+          branches={branches}
+          repoFullName={project.repo}
+          defaultBranch={project.defaultBranch}
+        />
+      )}
+      {changesOpen && project && (
+        <ChangesModal
+          branches={branches}
+          repoFullName={project.repo}
+          defaultBranch={project.defaultBranch}
         />
       )}
       {settingsOpen && <SettingsModal />}

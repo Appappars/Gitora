@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createIssue: (owner, repo, title, body, labels) => ipcRenderer.invoke('github:create-issue', { owner, repo, title, body, labels }),
     searchCommits: (owner, repo, query, author, since, until) => ipcRenderer.invoke('github:search-commits', { owner, repo, query, author, since, until }),
     createRelease: (owner, repo, input) => ipcRenderer.invoke('github:create-release', { owner, repo, input }),
+    getReadme: (owner, repo, branch) => ipcRenderer.invoke('github:get-readme', { owner, repo, branch }),
+    saveReadme: (owner, repo, branch, content, message) => ipcRenderer.invoke('github:save-readme', { owner, repo, branch, content, message }),
+    checkFolderChanges: (owner, repo, branch, folderPath) => ipcRenderer.invoke('github:check-folder-changes', { owner, repo, branch, folderPath }),
+    commitFolderChanges: (owner, repo, branch, folderPath, message) => ipcRenderer.invoke('github:commit-folder-changes', { owner, repo, branch, folderPath, message }),
   },
   app: {
     getCurrentVersion: () => ipcRenderer.invoke('app:get-current-version'),

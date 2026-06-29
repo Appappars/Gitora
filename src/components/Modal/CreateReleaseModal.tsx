@@ -6,6 +6,7 @@ import { Branch, ReleaseAssetSelection } from '../../types';
 interface CreateReleaseModalProps {
   branches: Branch[];
   repoFullName: string;
+  defaultBranch: string;
 }
 
 function formatSize(bytes: number): string {
@@ -14,13 +15,13 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
-export const CreateReleaseModal: React.FC<CreateReleaseModalProps> = ({ branches, repoFullName }) => {
+export const CreateReleaseModal: React.FC<CreateReleaseModalProps> = ({ branches, repoFullName, defaultBranch }) => {
   const { setReleaseOpen, createRelease, selectReleaseAsset, loading } = useApp();
   const [owner, repo] = repoFullName.split('/');
   const [tagName, setTagName] = useState('');
   const [name, setName] = useState('');
   const [body, setBody] = useState('');
-  const [targetCommitish, setTargetCommitish] = useState(branches[0]?.name || 'main');
+  const [targetCommitish, setTargetCommitish] = useState(defaultBranch || branches[0]?.name || 'main');
   const [draft, setDraft] = useState(true);
   const [prerelease, setPrerelease] = useState(false);
   const [asset, setAsset] = useState<ReleaseAssetSelection | null>(null);

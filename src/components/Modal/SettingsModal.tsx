@@ -183,7 +183,7 @@ export const SettingsModal: React.FC = () => {
             <h3 className="text-xs font-bold mb-2">О приложении</h3>
             <div className="text-[11px] text-[#7D7482] space-y-1">
               <p>Gitora — визуальный граф истории Git</p>
-              <p>Версия: 0.1.10</p>
+              <p>Версия: 0.1.11</p>
               <p>Разработано совместно Sabinchous и Appappars</p>
             </div>
           </div>

@@ -8,6 +8,7 @@ export interface Project {
   updated: string;
   description: string;
   isPrivate: boolean;
+  defaultBranch: string;
 }
 
 export interface Commit {
@@ -51,6 +52,7 @@ export interface GitHubRepo {
   stargazers_count: number;
   forks_count: number;
   updated_at: string;
+  default_branch: string;
 }
 
 export interface GitHubCommit {
@@ -166,6 +168,27 @@ export interface CreateReleaseInput {
   assetPath?: string;
 }
 
+export interface CommitResult {
+  sha: string;
+  changed: boolean;
+  count?: number;
+}
+
+export interface FolderChange {
+  path: string;
+  status: 'added' | 'modified' | 'deleted';
+}
+
+export interface FolderChangesSummary {
+  folderPath: string;
+  branch: string;
+  warnings: string[];
+  added: number;
+  modified: number;
+  deleted: number;
+  changes: FolderChange[];
+}
+
 export interface UploadFolderSummary {
   path: string;
   fileCount: number;
@@ -211,6 +234,10 @@ export interface ElectronAPI {
     createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<GitHubApiResult<GitHubIssue>>;
     searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubApiResult<GitHubCommit[]>>;
     createRelease: (owner: string, repo: string, input: CreateReleaseInput) => Promise<GitHubApiResult<Release>>;
+    getReadme: (owner: string, repo: string, branch: string) => Promise<GitHubApiResult<string>>;
+    saveReadme: (owner: string, repo: string, branch: string, content: string, message: string) => Promise<GitHubApiResult<CommitResult>>;
+    checkFolderChanges: (owner: string, repo: string, branch: string, folderPath: string) => Promise<GitHubApiResult<FolderChangesSummary>>;
+    commitFolderChanges: (owner: string, repo: string, branch: string, folderPath: string, message: string) => Promise<GitHubApiResult<CommitResult>>;
   };
   app: {
     getCurrentVersion: () => Promise<GitHubApiResult<string>>;

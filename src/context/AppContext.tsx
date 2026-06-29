@@ -9,9 +9,11 @@ import React, {
 import {
   Branch,
   Commit,
+  CommitResult,
   CreateReleaseInput,
   CreateRepositoryResult,
   DownloadOptions,
+  FolderChangesSummary,
   GitHubCommit,
   GitHubIssue,
   GitHubPR,
@@ -37,6 +39,8 @@ interface AppState {
   loginOpen: boolean;
   updatesOpen: boolean;
   releaseOpen: boolean;
+  readmeOpen: boolean;
+  changesOpen: boolean;
   toast: string;
   projects: Project[];
   commits: Commit[];
@@ -62,6 +66,8 @@ interface AppContextType extends AppState {
   setLoginOpen: (open: boolean) => void;
   setUpdatesOpen: (open: boolean) => void;
   setReleaseOpen: (open: boolean) => void;
+  setReadmeOpen: (open: boolean) => void;
+  setChangesOpen: (open: boolean) => void;
   notify: (text: string) => void;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -88,6 +94,10 @@ interface AppContextType extends AppState {
   getIssue: (owner: string, repo: string, number: number) => Promise<GitHubIssue | null>;
   createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<boolean>;
   createRelease: (owner: string, repo: string, input: CreateReleaseInput) => Promise<boolean>;
+  getReadme: (owner: string, repo: string, branch: string) => Promise<string>;
+  saveReadme: (owner: string, repo: string, branch: string, content: string, message: string) => Promise<boolean>;
+  checkFolderChanges: (owner: string, repo: string, branch: string, folderPath: string) => Promise<FolderChangesSummary | null>;
+  commitFolderChanges: (owner: string, repo: string, branch: string, folderPath: string, message: string) => Promise<CommitResult | null>;
   searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubCommit[]>;
   selectUploadFolder: () => Promise<UploadFolderSummary | null>;
   selectReleaseAsset: () => Promise<ReleaseAssetSelection | null>;
@@ -134,6 +144,7 @@ function mapProjects(repos: GitHubRepo[]): Project[] {
     updated: new Date(repo.updated_at).toLocaleDateString('ru-RU'),
     description: repo.description || '',
     isPrivate: repo.private,
+    defaultBranch: repo.default_branch || 'main',
   }));
 }
 
@@ -172,6 +183,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [loginOpen, setLoginOpen] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
+  const [readmeOpen, setReadmeOpen] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
@@ -182,7 +195,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [error, setError] = useState<string | null>(null);
   const [graphLayout, setGraphLayout] = useState<GraphLayoutResult | null>(null);
   const [releases, setReleases] = useState<Release[]>([]);
-  const [currentVersion, setCurrentVersion] = useState('0.1.10');
+  const [currentVersion, setCurrentVersion] = useState('0.1.11');
   const toastTimer = useRef<number | undefined>(undefined);
   const requestId = useRef(0);
   const initialized = useRef(false);
@@ -431,6 +444,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const getReadme = async (owner: string, repo: string, branch: string): Promise<string> => {
+    const result = await window.electronAPI?.github.getReadme(owner, repo, branch);
+    if (result?.success) return result.data ?? '';
+    showError(result?.error || 'Не удалось загрузить README');
+    return '';
+  };
+
+  const saveReadme = async (owner: string, repo: string, branch: string, content: string, message: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.saveReadme(owner, repo, branch, content, message);
+      if (!result?.success || !result.data) {
+        showError(result?.error || 'Не удалось сохранить README');
+        return false;
+      }
+      notify(result.data.changed ? 'README сохранён' : 'README без изменений');
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkFolderChanges = async (owner: string, repo: string, branch: string, folderPath: string): Promise<FolderChangesSummary | null> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.checkFolderChanges(owner, repo, branch, folderPath);
+      if (result?.success && result.data) return result.data;
+      showError(result?.error || 'Не удалось проверить изменения');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const commitFolderChanges = async (owner: string, repo: string, branch: string, folderPath: string, message: string): Promise<CommitResult | null> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.commitFolderChanges(owner, repo, branch, folderPath, message);
+      if (!result?.success || !result.data) {
+        showError(result?.error || 'Не удалось отправить коммит');
+        return null;
+      }
+      notify(result.data.changed ? `Коммит отправлен: ${result.data.sha.slice(0, 7)}` : 'Изменений нет');
+      return result.data;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const searchCommits = async (owner: string, repo: string, query: string, author?: string, since?: string, until?: string): Promise<GitHubCommit[]> => {
     const result = await window.electronAPI?.github.searchCommits(owner, repo, query, author, since, until);
     if (result?.success && result.data) {
@@ -606,6 +668,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       loginOpen,
       updatesOpen,
       releaseOpen,
+      readmeOpen,
+      changesOpen,
       toast,
       projects,
       commits,
@@ -628,6 +692,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setLoginOpen,
       setUpdatesOpen,
       setReleaseOpen,
+      setReadmeOpen,
+      setChangesOpen,
       notify,
       login,
       logout,
@@ -654,6 +720,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       getIssue,
       createIssue,
       createRelease,
+      getReadme,
+      saveReadme,
+      checkFolderChanges,
+      commitFolderChanges,
       searchCommits,
       selectReleaseAsset,
       selectUploadFolder,

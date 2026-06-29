@@ -6,9 +6,10 @@ import { Branch } from '../../types';
 interface BranchModalProps {
   branches: Branch[];
   repoFullName: string;
+  defaultBranch: string;
 }
 
-export const BranchModal: React.FC<BranchModalProps> = ({ branches, repoFullName }) => {
+export const BranchModal: React.FC<BranchModalProps> = ({ branches, repoFullName, defaultBranch }) => {
   const { setBranchOpen, createBranch, deleteBranch, renameBranch, loading } = useApp();
   const [owner, repo] = repoFullName.split('/');
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'rename'>('list');
@@ -18,6 +19,7 @@ export const BranchModal: React.FC<BranchModalProps> = ({ branches, repoFullName
   const [confirmDelete, setConfirmDelete] = useState<Branch | null>(null);
   const [closing, setClosing] = useState(false);
   const [closingDelete, setClosingDelete] = useState(false);
+  const baseBranch = branches.find(branch => branch.name === defaultBranch) ?? branches[0];
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -46,7 +48,7 @@ export const BranchModal: React.FC<BranchModalProps> = ({ branches, repoFullName
     event.preventDefault();
     if (!newBranchName.trim()) return;
     
-    const fromSha = branches[0]?.tipSha || '';
+    const fromSha = baseBranch?.tipSha || '';
     const success = await createBranch(owner, repo, newBranchName.trim(), fromSha);
     if (success) {
       setNewBranchName('');
@@ -170,7 +172,7 @@ export const BranchModal: React.FC<BranchModalProps> = ({ branches, repoFullName
               />
             </label>
             <p className="text-[10px] text-[#7D7482] mt-2">
-              Ветка будет создана от <b>{branches[0]?.name || 'main'}</b>
+              Ветка будет создана от <b>{baseBranch?.name || 'main'}</b>
             </p>
             <div className="flex justify-end gap-2 mt-4">
               <button

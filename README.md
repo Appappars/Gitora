@@ -33,7 +33,7 @@
 
 ### 1. Скачать приложение
 
-Скачайте `Gitora Setup 0.1.10.exe` из папки `outputs/release/` или загрузите с [GitHub Releases](https://github.com/Appappars/Gitora/releases).
+Скачайте `Gitora Setup 0.1.11.exe` из папки `outputs/release/` или загрузите с [GitHub Releases](https://github.com/Appappars/Gitora/releases).
 
 Запустите установщик и следуйте инструкциям.
 
