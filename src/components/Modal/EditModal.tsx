@@ -24,11 +24,11 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [owner, repo] = repoFullName.split('/');
 
   useEffect(() => {
-    const close = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !loading) close();
     };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [loading]);
 
   const close = () => {

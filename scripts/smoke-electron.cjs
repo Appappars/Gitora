@@ -45,6 +45,7 @@ ipcMain.handle('app:get-releases', async () => ({ success: true, data: [] }));
 ipcMain.handle('app:download-release', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('app:download-archive', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('app:select-release-asset', async () => ({ success: true, data: null }));
+ipcMain.handle('app:select-download-folder', async () => ({ success: true, data: null }));
 
 app.whenReady().then(async () => {
   const errors = [];

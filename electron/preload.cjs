@@ -26,10 +26,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     getCurrentVersion: () => ipcRenderer.invoke('app:get-current-version'),
     getReleases: () => ipcRenderer.invoke('app:get-releases'),
-    downloadRelease: (url, fileName) => ipcRenderer.invoke('app:download-release', { url, fileName }),
-    downloadArchive: (owner, repo, sha) => ipcRenderer.invoke('app:download-archive', { owner, repo, sha }),
+    downloadRelease: (url, fileName, options) => ipcRenderer.invoke('app:download-release', { url, fileName, options }),
+    downloadArchive: (owner, repo, sha, options) => ipcRenderer.invoke('app:download-archive', { owner, repo, sha, options }),
     selectUploadFolder: () => ipcRenderer.invoke('app:select-upload-folder'),
     selectReleaseAsset: () => ipcRenderer.invoke('app:select-release-asset'),
+    selectDownloadFolder: () => ipcRenderer.invoke('app:select-download-folder'),
     clearUploadFolder: () => ipcRenderer.invoke('app:clear-upload-folder'),
   },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
