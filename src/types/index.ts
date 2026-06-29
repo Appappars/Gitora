@@ -150,6 +150,43 @@ export interface Release {
   assets: ReleaseAsset[];
 }
 
+export interface ReleaseAssetSelection {
+  path: string;
+  name: string;
+  size: number;
+}
+
+export interface CreateReleaseInput {
+  tagName: string;
+  targetCommitish?: string;
+  name?: string;
+  body?: string;
+  draft?: boolean;
+  prerelease?: boolean;
+  assetPath?: string;
+}
+
+export interface CommitResult {
+  sha: string;
+  changed: boolean;
+  count?: number;
+}
+
+export interface FolderChange {
+  path: string;
+  status: 'added' | 'modified' | 'deleted';
+}
+
+export interface FolderChangesSummary {
+  folderPath: string;
+  branch: string;
+  warnings: string[];
+  added: number;
+  modified: number;
+  deleted: number;
+  changes: FolderChange[];
+}
+
 export interface UploadFolderSummary {
   path: string;
   fileCount: number;
@@ -194,15 +231,21 @@ export interface ElectronAPI {
     getIssue: (owner: string, repo: string, number: number) => Promise<GitHubApiResult<GitHubIssue>>;
     createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<GitHubApiResult<GitHubIssue>>;
     searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubApiResult<GitHubCommit[]>>;
+    createRelease: (owner: string, repo: string, input: CreateReleaseInput) => Promise<GitHubApiResult<Release>>;
+    getReadme: (owner: string, repo: string, branch: string) => Promise<GitHubApiResult<string>>;
+    saveReadme: (owner: string, repo: string, branch: string, content: string, message: string) => Promise<GitHubApiResult<CommitResult>>;
+    checkFolderChanges: (owner: string, repo: string, branch: string, folderPath: string) => Promise<GitHubApiResult<FolderChangesSummary>>;
+    commitFolderChanges: (owner: string, repo: string, branch: string, folderPath: string, message: string) => Promise<GitHubApiResult<CommitResult>>;
   };
   app: {
     getCurrentVersion: () => Promise<GitHubApiResult<string>>;
     getReleases: () => Promise<GitHubApiResult<Release[]>>;
     downloadRelease: (url: string, fileName: string, options?: DownloadOptions) => Promise<GitHubApiResult<string | null>>;
     downloadArchive: (owner: string, repo: string, sha: string, options?: DownloadOptions) => Promise<GitHubApiResult<string | null>>;
+    selectReleaseAsset: () => Promise<GitHubApiResult<ReleaseAssetSelection | null>>;
     selectUploadFolder: () => Promise<GitHubApiResult<UploadFolderSummary | null>>;
-    clearUploadFolder: () => Promise<GitHubApiResult<null>>;
     selectDownloadFolder: () => Promise<GitHubApiResult<string | null>>;
+    clearUploadFolder: () => Promise<GitHubApiResult<null>>;
   };
   openExternal: (url: string) => Promise<GitHubApiResult<null>>;
 }

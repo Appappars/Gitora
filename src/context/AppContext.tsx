@@ -9,8 +9,11 @@ import React, {
 import {
   Branch,
   Commit,
+  CommitResult,
+  CreateReleaseInput,
   CreateRepositoryResult,
   DownloadOptions,
+  FolderChangesSummary,
   GitHubCommit,
   GitHubIssue,
   GitHubPR,
@@ -18,6 +21,7 @@ import {
   GitHubUser,
   Project,
   Release,
+  ReleaseAssetSelection,
   UploadFolderSummary,
 } from '../types';
 import { computeGraphLayout, GraphLayoutResult } from '../lib/graphLayout';
@@ -34,6 +38,9 @@ interface AppState {
   settingsOpen: boolean;
   loginOpen: boolean;
   updatesOpen: boolean;
+  releaseOpen: boolean;
+  readmeOpen: boolean;
+  changesOpen: boolean;
   toast: string;
   projects: Project[];
   commits: Commit[];
@@ -58,6 +65,9 @@ interface AppContextType extends AppState {
   setSettingsOpen: (open: boolean) => void;
   setLoginOpen: (open: boolean) => void;
   setUpdatesOpen: (open: boolean) => void;
+  setReleaseOpen: (open: boolean) => void;
+  setReadmeOpen: (open: boolean) => void;
+  setChangesOpen: (open: boolean) => void;
   notify: (text: string) => void;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -83,8 +93,14 @@ interface AppContextType extends AppState {
   loadIssues: (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => Promise<void>;
   getIssue: (owner: string, repo: string, number: number) => Promise<GitHubIssue | null>;
   createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<boolean>;
+  createRelease: (owner: string, repo: string, input: CreateReleaseInput) => Promise<boolean>;
+  getReadme: (owner: string, repo: string, branch: string) => Promise<string>;
+  saveReadme: (owner: string, repo: string, branch: string, content: string, message: string) => Promise<boolean>;
+  checkFolderChanges: (owner: string, repo: string, branch: string, folderPath: string) => Promise<FolderChangesSummary | null>;
+  commitFolderChanges: (owner: string, repo: string, branch: string, folderPath: string, message: string) => Promise<CommitResult | null>;
   searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubCommit[]>;
   selectUploadFolder: () => Promise<UploadFolderSummary | null>;
+  selectReleaseAsset: () => Promise<ReleaseAssetSelection | null>;
   clearUploadFolder: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   loadReleases: () => Promise<void>;
@@ -165,6 +181,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  const [readmeOpen, setReadmeOpen] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
@@ -409,12 +428,84 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const createRelease = async (owner: string, repo: string, input: CreateReleaseInput): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.createRelease(owner, repo, input);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось создать релиз');
+        return false;
+      }
+      notify(`Релиз «${input.tagName}» создан`);
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getReadme = async (owner: string, repo: string, branch: string): Promise<string> => {
+    const result = await window.electronAPI?.github.getReadme(owner, repo, branch);
+    if (result?.success) return result.data ?? '';
+    showError(result?.error || 'Не удалось загрузить README');
+    return '';
+  };
+
+  const saveReadme = async (owner: string, repo: string, branch: string, content: string, message: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.saveReadme(owner, repo, branch, content, message);
+      if (!result?.success || !result.data) {
+        showError(result?.error || 'Не удалось сохранить README');
+        return false;
+      }
+      notify(result.data.changed ? 'README сохранён' : 'README без изменений');
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkFolderChanges = async (owner: string, repo: string, branch: string, folderPath: string): Promise<FolderChangesSummary | null> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.checkFolderChanges(owner, repo, branch, folderPath);
+      if (result?.success && result.data) return result.data;
+      showError(result?.error || 'Не удалось проверить изменения');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const commitFolderChanges = async (owner: string, repo: string, branch: string, folderPath: string, message: string): Promise<CommitResult | null> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.commitFolderChanges(owner, repo, branch, folderPath, message);
+      if (!result?.success || !result.data) {
+        showError(result?.error || 'Не удалось отправить коммит');
+        return null;
+      }
+      notify(result.data.changed ? `Коммит отправлен: ${result.data.sha.slice(0, 7)}` : 'Изменений нет');
+      return result.data;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const searchCommits = async (owner: string, repo: string, query: string, author?: string, since?: string, until?: string): Promise<GitHubCommit[]> => {
     const result = await window.electronAPI?.github.searchCommits(owner, repo, query, author, since, until);
     if (result?.success && result.data) {
       return result.data;
     }
     return [];
+  };
+
+  const selectReleaseAsset = async (): Promise<ReleaseAssetSelection | null> => {
+    if (!window.electronAPI) return null;
+    const result = await window.electronAPI.app.selectReleaseAsset();
+    if (result?.success) return result.data ?? null;
+    if (result?.error) showError(result.error);
+    return null;
   };
 
   const selectUploadFolder = async (): Promise<UploadFolderSummary | null> => {
@@ -454,7 +545,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notify(`Файл ${fileName} загружен`);
         return result.data;
       }
-      if (result?.success && result.data === null) return null;
       showError(result?.error || 'Не удалось загрузить файл');
       return null;
     } finally {
@@ -474,7 +564,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notify('Архив скачан');
         return result.data;
       }
-      if (result?.success && result.data === null) return null;
       showError(result?.error || 'Не удалось скачать архив');
       return null;
     } finally {
@@ -577,6 +666,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       settingsOpen,
       loginOpen,
       updatesOpen,
+      releaseOpen,
+      readmeOpen,
+      changesOpen,
       toast,
       projects,
       commits,
@@ -598,6 +690,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setSettingsOpen,
       setLoginOpen,
       setUpdatesOpen,
+      setReleaseOpen,
+      setReadmeOpen,
+      setChangesOpen,
       notify,
       login,
       logout,
@@ -623,7 +718,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       loadIssues,
       getIssue,
       createIssue,
+      createRelease,
+      getReadme,
+      saveReadme,
+      checkFolderChanges,
+      commitFolderChanges,
       searchCommits,
+      selectReleaseAsset,
       selectUploadFolder,
       clearUploadFolder,
       openExternal,

@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getIssue: (owner, repo, number) => ipcRenderer.invoke('github:issue', { owner, repo, number }),
     createIssue: (owner, repo, title, body, labels) => ipcRenderer.invoke('github:create-issue', { owner, repo, title, body, labels }),
     searchCommits: (owner, repo, query, author, since, until) => ipcRenderer.invoke('github:search-commits', { owner, repo, query, author, since, until }),
+    createRelease: (owner, repo, input) => ipcRenderer.invoke('github:create-release', { owner, repo, input }),
+    getReadme: (owner, repo, branch) => ipcRenderer.invoke('github:get-readme', { owner, repo, branch }),
+    saveReadme: (owner, repo, branch, content, message) => ipcRenderer.invoke('github:save-readme', { owner, repo, branch, content, message }),
+    checkFolderChanges: (owner, repo, branch, folderPath) => ipcRenderer.invoke('github:check-folder-changes', { owner, repo, branch, folderPath }),
+    commitFolderChanges: (owner, repo, branch, folderPath, message) => ipcRenderer.invoke('github:commit-folder-changes', { owner, repo, branch, folderPath, message }),
   },
   app: {
     getCurrentVersion: () => ipcRenderer.invoke('app:get-current-version'),
@@ -28,8 +33,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     downloadRelease: (url, fileName, options) => ipcRenderer.invoke('app:download-release', { url, fileName, options }),
     downloadArchive: (owner, repo, sha, options) => ipcRenderer.invoke('app:download-archive', { owner, repo, sha, options }),
     selectUploadFolder: () => ipcRenderer.invoke('app:select-upload-folder'),
-    clearUploadFolder: () => ipcRenderer.invoke('app:clear-upload-folder'),
+    selectReleaseAsset: () => ipcRenderer.invoke('app:select-release-asset'),
     selectDownloadFolder: () => ipcRenderer.invoke('app:select-download-folder'),
+    clearUploadFolder: () => ipcRenderer.invoke('app:clear-upload-folder'),
   },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 });

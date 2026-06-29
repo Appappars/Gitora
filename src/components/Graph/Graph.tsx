@@ -30,7 +30,7 @@ export const Graph: React.FC = () => {
 
   if (!graphLayout || graphLayout.nodes.length === 0) {
     return (
-    <div className="flex-1 h-full flex items-center justify-center min-w-0 bg-[var(--graph-bg)]">
+      <div className="flex-1 h-full flex items-center justify-center min-w-0 bg-[var(--graph-bg)]">
         <p className="text-sm text-[#7D7482]">Нет данных для отображения</p>
       </div>
     );

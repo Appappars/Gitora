@@ -1,0 +1,44 @@
+{
+  "sessions": {
+    "019f0525-6f95-7f30-84fd-55d0587cdc28": {
+      "ordinary_no_progress_guard": {
+        "fingerprint": "ordinary|готово. довёл визуал и собрал новый exe: `c:\\users\\appappa\\desktop\\gitora\\outputs\\release\\gitora setup 0.1.9.exe` размер: `103,863,233` байт, время сборки: `26.06.2026 22:03:55`. что поправил: - граф веток: добавил контрастные theme-токены для веток и dark-фона, линии стали ярче и толще. - dark theme: общие поверхности, login/settings/updates/branch-модалки теперь используют единый `modal-overlay/modal-panel`. - анимации: добавил плавное закрытие для login, settings, updates, branch modal и confirm-delete ветки. - фокус/поля: добавил `focus-surface` на оставшиеся поля в модалках веток/settings/login. - проверил settings visually в браузере: текст и контролы читаемы в темной теме. ключевые файлы: - [global.css](c:/users/appappa/desktop/gitora/src/styles/global.css) - [appcontext.tsx](c:/users/appappa/desktop/gitora/src/context/appcontext.tsx) - [graph.tsx](c:/users/appappa/desktop/gitora/src/components/graph/graph.tsx) - [commitnode.tsx](c:/users/appappa/desktop/gitora/src/components/graph/commitnode.tsx) - [branchmodal.tsx](c:/users/appappa/desktop/gitora/src/components/modal/branchmodal.tsx) - [settingsmodal.tsx](c:/users/appappa/desktop/gitora/src/components/modal/settingsmodal.tsx) - [loginmodal.tsx](c:/users/appappa/desktop/gitora/src/components/modal/loginmodal.tsx) - [updatesmodal.tsx](c:/users/appappa/desktop/gitora/src/components/modal/updatesmodal.tsx) проверки: - `npm run test` — 9/9 passed. - `npm run build` — passed. - `npm run test:electron` — passed, `graphvisible: true`. - `git diff --check` — без ошибок, только crlf warnings. - `npm run electron:build` — exe собран. не проверял destructive-удаление реального репозитория кликом, чтобы не удалить данные. computer use увидел окно gitora, но скриншот electron-окна не смог снять из-за системной ошибки захвата `setisborderrequired failed`; браузерную визуальную проверку сделал через in-app browser.",
+        "first_seen_at": "2026-06-26T19:04:47.746Z",
+        "last_seen_at": "2026-06-26T19:04:47.746Z",
+        "repeat_count": 1,
+        "last_turn_id": "019f0547-d091-7803-976e-891d3db5a990",
+        "last_thread_id": null
+      }
+    },
+    "019f0566-c80e-77b2-a09d-3dc083fc1133": {
+      "ordinary_no_progress_guard": {
+        "fingerprint": "ordinary|{\"message\":\"add payment capture to the lead funnel\"}",
+        "first_seen_at": "2026-06-26T19:27:36.302Z",
+        "last_seen_at": "2026-06-26T19:27:36.302Z",
+        "repeat_count": 1,
+        "last_turn_id": "019f0566-c88e-7043-a7ef-57b88171a0e7",
+        "last_thread_id": null
+      }
+    },
+    "019f0926-d504-7ec3-828d-16362c5ee77f": {
+      "ordinary_no_progress_guard": {
+        "fingerprint": "ordinary|готово. сделал github release `v0.1.9`: [gitora 0.1.9](https://github.com/appappars/gitora/releases/tag/v0.1.9). загружен новый exe: `gitora.setup.0.1.9.exe` sha256: `0c45bd5f664dae530de36544f38002ea10d255150cabd19145ee5b4e585ff740` проверки: `npm run electron:build` успешно собрал installer. `npm run test` успешно: 4 test files, 9 tests. `git status` чистый. файлы исходников не менял, создал и запушил только тег `v0.1.9`.",
+        "first_seen_at": "2026-06-27T15:08:01.667Z",
+        "last_seen_at": "2026-06-27T15:08:01.667Z",
+        "repeat_count": 1,
+        "last_turn_id": "019f099d-1684-7102-9569-ccc429ddbf7c",
+        "last_thread_id": null
+      }
+    },
+    "019f13c7-b703-7342-b926-e25146e7f340": {
+      "ordinary_no_progress_guard": {
+        "fingerprint": "ordinary|готово. `.exe` собран здесь: [c:/users/appappa/desktop/gitora/outputs/release/gitora setup 0.1.10.exe](<c:/users/appappa/desktop/gitora/outputs/release/gitora setup 0.1.10.exe>) размер: `103861799` байт. также обновились `latest.yml` и `.blockmap` для релиза.",
+        "first_seen_at": "2026-06-29T17:34:49.036Z",
+        "last_seen_at": "2026-06-29T17:34:49.036Z",
+        "repeat_count": 1,
+        "last_turn_id": "019f1471-73b3-7cf0-9453-bb99115e317a",
+        "last_thread_id": null
+      }
+    }
+  }
+}

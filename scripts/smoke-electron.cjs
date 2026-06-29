@@ -38,11 +38,31 @@ ipcMain.handle('github:repository', async () => ({
   },
 }));
 ipcMain.handle('github:create-repo', async () => ({ success: false, error: 'Disabled in smoke test' }));
+ipcMain.handle('github:create-release', async () => ({ success: false, error: 'Disabled in smoke test' }));
+ipcMain.handle('github:get-readme', async () => ({ success: true, data: '# Smoke repo\n' }));
+ipcMain.handle('github:save-readme', async () => ({ success: true, data: { sha: 'readme', changed: true } }));
+ipcMain.handle('github:check-folder-changes', async () => ({
+  success: true,
+  data: {
+    folderPath: 'C:\\smoke',
+    branch: 'main',
+    warnings: [],
+    added: 1,
+    modified: 0,
+    deleted: 0,
+    changes: [{ path: 'README.md', status: 'added' }],
+  },
+}));
+ipcMain.handle('github:commit-folder-changes', async () => ({ success: true, data: { sha: 'folder', changed: true, count: 1 } }));
 ipcMain.handle('open-external', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('app:get-current-version', async () => ({ success: true, data: 'smoke' }));
 ipcMain.handle('app:get-releases', async () => ({ success: true, data: [] }));
 ipcMain.handle('app:download-release', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('app:download-archive', async () => ({ success: false, error: 'Disabled in smoke test' }));
+ipcMain.handle('app:select-upload-folder', async () => ({ success: true, data: { path: 'C:\\smoke', fileCount: 1, totalBytes: 12, warnings: [] } }));
+ipcMain.handle('app:select-release-asset', async () => ({ success: true, data: null }));
+ipcMain.handle('app:select-download-folder', async () => ({ success: true, data: null }));
+ipcMain.handle('app:clear-upload-folder', async () => ({ success: true, data: null }));
 
 app.whenReady().then(async () => {
   const errors = [];
@@ -94,6 +114,14 @@ app.whenReady().then(async () => {
           && panelAfterScroll.bottom <= innerHeight + 1
           && panelAfterScroll.top <= panelBeforeScroll.top
         );
+        [...document.querySelectorAll('button')].find(button => button.textContent?.includes('README'))?.click();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const readmeModal = document.querySelector('#readme-title');
+        readmeModal?.closest('[role="dialog"]')?.querySelector('button[aria-label="Закрыть"]')?.click();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Изменения'))?.click();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const changesModal = document.querySelector('#changes-title');
         return {
         title: document.title,
         rootChildren: document.querySelector('#root')?.childElementCount ?? 0,
@@ -101,6 +129,8 @@ app.whenReady().then(async () => {
         graphVisible: Boolean(node && edge),
         alignmentError,
         panelStaysVisible,
+        readmeModalVisible: Boolean(readmeModal),
+        changesModalVisible: Boolean(changesModal),
         panelBeforeTop: panelBeforeScroll?.top ?? null,
         panelAfterTop: panelAfterScroll?.top ?? null
         };
@@ -114,6 +144,8 @@ app.whenReady().then(async () => {
       || state.alignmentError === null
       || state.alignmentError > 0.5
       || !state.panelStaysVisible
+      || !state.readmeModalVisible
+      || !state.changesModalVisible
       || errors.length
     ) {
       throw new Error(JSON.stringify({ state, errors }));

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  BookOpen,
   Box,
   ChevronRight,
   CircleDot,
@@ -7,10 +8,12 @@ import {
   ExternalLink,
   GitBranch,
   GitCommitHorizontal,
+  GitCompare,
   GitPullRequest,
   History,
   Link2,
   Menu,
+  PackagePlus,
   Pencil,
   Settings,
 } from 'lucide-react';
@@ -28,6 +31,9 @@ import { EditModal } from './components/Modal/EditModal';
 import { BranchModal } from './components/Modal/BranchModal';
 import { CreatePRModal } from './components/Modal/CreatePRModal';
 import { CreateIssueModal } from './components/Modal/CreateIssueModal';
+import { CreateReleaseModal } from './components/Modal/CreateReleaseModal';
+import { ReadmeModal } from './components/Modal/ReadmeModal';
+import { ChangesModal } from './components/Modal/ChangesModal';
 import { SettingsModal } from './components/Modal/SettingsModal';
 import { LoginModal } from './components/Modal/LoginModal';
 import { UpdatesModal } from './components/Modal/UpdatesModal';
@@ -46,6 +52,9 @@ export const App: React.FC = () => {
     prOpen,
     settingsOpen,
     issueOpen,
+    releaseOpen,
+    readmeOpen,
+    changesOpen,
     loginOpen,
     branchFilter,
     setBranchFilter,
@@ -59,6 +68,9 @@ export const App: React.FC = () => {
     branches,
     commits,
     setLoginOpen,
+    setReleaseOpen,
+    setReadmeOpen,
+    setChangesOpen,
     openExternal,
   } = useApp();
 
@@ -165,6 +177,27 @@ export const App: React.FC = () => {
                 >
                   <Pencil size={17} />
                   Редактировать
+                </button>
+                <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
+                  onClick={() => setReadmeOpen(true)}
+                >
+                  <BookOpen size={17} />
+                  README
+                </button>
+                <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
+                  onClick={() => setChangesOpen(true)}
+                >
+                  <GitCompare size={17} />
+                  Изменения
+                </button>
+                <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
+                  onClick={() => setReleaseOpen(true)}
+                >
+                  <PackagePlus size={17} />
+                  Релиз
                 </button>
                 <button
                   className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
@@ -310,6 +343,24 @@ export const App: React.FC = () => {
       )}
       {issueOpen && project && (
         <CreateIssueModal repoFullName={project.repo} />
+      )}
+      {releaseOpen && project && (
+        <CreateReleaseModal
+          branches={branches}
+          repoFullName={project.repo}
+        />
+      )}
+      {readmeOpen && project && (
+        <ReadmeModal
+          branches={branches}
+          repoFullName={project.repo}
+        />
+      )}
+      {changesOpen && project && (
+        <ChangesModal
+          branches={branches}
+          repoFullName={project.repo}
+        />
       )}
       {settingsOpen && <SettingsModal />}
       <UpdatesModal />

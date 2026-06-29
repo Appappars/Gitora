@@ -1,6 +1,7 @@
 ﻿const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
+const crypto = require('crypto');
 const ignore = require('ignore');
 const { githubErrorMessage } = require('./githubErrors.cjs');
 
@@ -71,6 +72,26 @@ async function githubRequest(endpoint, options = {}, token = githubToken) {
 
 function validRepo(owner, repo) {
   return REPO_PART.test(owner) && REPO_PART.test(repo);
+}
+
+function refPath(branch) {
+  return String(branch).split('/').map(encodeURIComponent).join('/');
+}
+
+function mapRelease(release) {
+  return {
+    tag: release.tag_name,
+    name: release.name,
+    body: release.body,
+    publishedAt: release.published_at || release.created_at,
+    prerelease: release.prerelease,
+    assets: release.assets.map(asset => ({
+      name: asset.name,
+      size: asset.size,
+      downloadUrl: asset.browser_download_url,
+      downloadCount: asset.download_count,
+    })),
+  };
 }
 
 function result(handler) {
@@ -174,7 +195,109 @@ async function scanFolder(dirPath, ig, rootPath) {
 async function scanUploadFolder(dirPath) {
   const ig = await readGitignore(dirPath);
   const { files, totalBytes, warnings } = await scanFolder(dirPath, ig, dirPath);
-  return { path: dirPath, fileCount: files.length, totalBytes, warnings, files };
+  return { path: dirPath, fileCount: files.length, totalBytes, warnings, files, ig };
+}
+
+function gitBlobSha(buffer) {
+  return crypto
+    .createHash('sha1')
+    .update(Buffer.from(`blob ${buffer.length}\0`))
+    .update(buffer)
+    .digest('hex');
+}
+
+function isExcludedRepoPath(filePath, ig) {
+  const parts = filePath.split('/');
+  const basename = path.posix.basename(filePath);
+  const secretIg = ignore().add(EXCLUDED_PATTERNS);
+  return parts.some(part => ALWAYS_EXCLUDED.has(part))
+    || secretIg.ignores(basename)
+    || Boolean(ig?.ignores(filePath));
+}
+
+async function getBranchState(owner, repo, branch) {
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${refPath(branch)}`);
+  const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${ref.object.sha}`);
+  const tree = await githubRequest(`/repos/${owner}/${repo}/git/trees/${commit.tree.sha}?recursive=1`);
+  return { headSha: ref.object.sha, treeSha: commit.tree.sha, tree };
+}
+
+function mapRemoteFiles(tree, ig) {
+  const files = new Map();
+  for (const item of tree.tree || []) {
+    if (item.type === 'blob' && !isExcludedRepoPath(item.path, ig)) files.set(item.path, item);
+  }
+  return files;
+}
+
+async function buildFolderChanges(owner, repo, branch, folderPath) {
+  const folderData = await scanUploadFolder(folderPath);
+  const branchState = await getBranchState(owner, repo, branch);
+  const remoteFiles = mapRemoteFiles(branchState.tree, folderData.ig);
+  const localFiles = new Map();
+  const changes = [];
+
+  for (const file of folderData.files) {
+    const content = await fs.readFile(file.fullPath);
+    const sha = gitBlobSha(content);
+    const remote = remoteFiles.get(file.relativePath);
+    localFiles.set(file.relativePath, { ...file, content, sha });
+    if (!remote) changes.push({ path: file.relativePath, status: 'added' });
+    else if (remote.sha !== sha) changes.push({ path: file.relativePath, status: 'modified' });
+  }
+
+  for (const filePath of remoteFiles.keys()) {
+    if (!localFiles.has(filePath)) changes.push({ path: filePath, status: 'deleted' });
+  }
+
+  return {
+    folderPath,
+    branch,
+    warnings: folderData.warnings,
+    files: localFiles,
+    branchState,
+    changes,
+    added: changes.filter(change => change.status === 'added').length,
+    modified: changes.filter(change => change.status === 'modified').length,
+    deleted: changes.filter(change => change.status === 'deleted').length,
+  };
+}
+
+async function commitTreeChanges(owner, repo, branch, baseTreeSha, parentSha, changes, localFiles, message) {
+  const treeItems = [];
+  for (const change of changes) {
+    if (change.status === 'deleted') {
+      treeItems.push({ path: change.path, mode: '100644', type: 'blob', sha: null });
+      continue;
+    }
+    const file = localFiles.get(change.path);
+    const blob = await githubRequest(`/repos/${owner}/${repo}/git/blobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: file.content.toString('base64'),
+        encoding: 'base64',
+      }),
+    });
+    treeItems.push({ path: change.path, mode: '100644', type: 'blob', sha: blob.sha });
+  }
+
+  const tree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_tree: baseTreeSha, tree: treeItems }),
+  });
+  const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, tree: tree.sha, parents: [parentSha] }),
+  });
+  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${refPath(branch)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sha: commit.sha, force: false }),
+  });
+  return commit;
 }
 
 async function resolveDownloadPath(fileName, options = {}) {
@@ -182,7 +305,7 @@ async function resolveDownloadPath(fileName, options = {}) {
 
   if (options?.mode === 'ask') {
     const saveResult = await dialog.showSaveDialog(mainWindow, {
-      title: 'Р’С‹Р±РµСЂРёС‚Рµ, РєСѓРґР° СЃРѕС…СЂР°РЅРёС‚СЊ С„Р°Р№Р»',
+      title: 'Выберите, куда сохранить файл',
       defaultPath: path.join(app.getPath('downloads'), safeFileName),
     });
     if (saveResult.canceled || !saveResult.filePath) return null;
@@ -476,6 +599,123 @@ ipcMain.handle('github:create-issue', result(async (_event, { owner, repo, title
   });
 }));
 
+ipcMain.handle('github:create-release', result(async (_event, { owner, repo, input }) => {
+  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  const tagName = typeof input?.tagName === 'string' ? input.tagName.trim() : '';
+  if (!tagName) throw new Error('Введите тег релиза');
+
+  const release = await githubRequest(`/repos/${owner}/${repo}/releases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tag_name: tagName,
+      target_commitish: input.targetCommitish || undefined,
+      name: input.name || tagName,
+      body: input.body || '',
+      draft: Boolean(input.draft),
+      prerelease: Boolean(input.prerelease),
+    }),
+  });
+
+  const assetPath = typeof input?.assetPath === 'string' ? input.assetPath.trim() : '';
+  if (!assetPath) return mapRelease(release);
+
+  const asset = await fs.readFile(assetPath);
+  const uploadUrl = release.upload_url.replace(
+    '{?name,label}',
+    `?name=${encodeURIComponent(path.basename(assetPath))}`,
+  );
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      ...githubHeaders(),
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(asset.length),
+    },
+    body: asset,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.message || 'Не удалось загрузить файл релиза');
+  }
+
+  return mapRelease(await githubRequest(`/repos/${owner}/${repo}/releases/${release.id}`));
+}));
+
+ipcMain.handle('github:get-readme', result(async (_event, { owner, repo, branch }) => {
+  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  const ref = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
+  const response = await fetch(`${API_ORIGIN}/repos/${owner}/${repo}/contents/README.md?ref=${encodeURIComponent(ref)}`, {
+    headers: githubHeaders(),
+  });
+  if (response.status === 404) return '';
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(githubErrorMessage(response.status, data?.message, `/repos/${owner}/${repo}/contents/README.md`, 'GET'));
+  return Buffer.from(String(data.content || '').replace(/\s/g, ''), 'base64').toString('utf8');
+}));
+
+ipcMain.handle('github:save-readme', result(async (_event, { owner, repo, branch, content, message }) => {
+  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  const ref = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
+  const cleanMessage = typeof message === 'string' && message.trim() ? message.trim() : 'Обновлён README';
+  const buffer = Buffer.from(typeof content === 'string' ? content : '', 'utf8');
+  const branchState = await getBranchState(owner, repo, ref);
+  const remoteFiles = mapRemoteFiles(branchState.tree);
+  const remote = remoteFiles.get('README.md');
+  if (remote?.sha === gitBlobSha(buffer)) return { sha: branchState.headSha, changed: false };
+
+  const localFiles = new Map([['README.md', { content: buffer }]]);
+  const commit = await commitTreeChanges(
+    owner,
+    repo,
+    ref,
+    branchState.treeSha,
+    branchState.headSha,
+    [{ path: 'README.md', status: remote ? 'modified' : 'added' }],
+    localFiles,
+    cleanMessage,
+  );
+  return { sha: commit.sha, changed: true };
+}));
+
+ipcMain.handle('github:check-folder-changes', result(async (_event, { owner, repo, branch, folderPath }) => {
+  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  const ref = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
+  const cleanFolderPath = typeof folderPath === 'string' ? folderPath.trim() : '';
+  if (!cleanFolderPath) throw new Error('Выберите папку проекта');
+  const data = await buildFolderChanges(owner, repo, ref, cleanFolderPath);
+  return {
+    folderPath: data.folderPath,
+    branch: data.branch,
+    warnings: data.warnings,
+    added: data.added,
+    modified: data.modified,
+    deleted: data.deleted,
+    changes: data.changes.slice(0, 200),
+  };
+}));
+
+ipcMain.handle('github:commit-folder-changes', result(async (_event, { owner, repo, branch, folderPath, message }) => {
+  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  const ref = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
+  const cleanFolderPath = typeof folderPath === 'string' ? folderPath.trim() : '';
+  if (!cleanFolderPath) throw new Error('Выберите папку проекта');
+  const cleanMessage = typeof message === 'string' && message.trim() ? message.trim() : 'Обновлены файлы проекта';
+  const data = await buildFolderChanges(owner, repo, ref, cleanFolderPath);
+  if (data.changes.length === 0) return { sha: data.branchState.headSha, changed: false };
+  const commit = await commitTreeChanges(
+    owner,
+    repo,
+    ref,
+    data.branchState.treeSha,
+    data.branchState.headSha,
+    data.changes,
+    data.files,
+    cleanMessage,
+  );
+  return { sha: commit.sha, changed: true, count: data.changes.length };
+}));
+
 ipcMain.handle('github:search-commits', result(async (_event, { owner, repo, query, author, since, until }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
   const params = new URLSearchParams({ per_page: '30' });
@@ -500,19 +740,32 @@ ipcMain.handle('app:select-upload-folder', result(async () => {
   return { path: folderData.path, fileCount: folderData.fileCount, totalBytes: folderData.totalBytes, warnings: folderData.warnings };
 }));
 
-ipcMain.handle('app:clear-upload-folder', result(async () => {
-  selectedUploadFolder = null;
-  return null;
+ipcMain.handle('app:select-release-asset', result(async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: 'Выберите файл релиза',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const filePath = result.filePaths[0];
+  const stat = await fs.stat(filePath);
+  return { path: filePath, name: path.basename(filePath), size: stat.size };
 }));
 
 ipcMain.handle('app:select-download-folder', result(async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
-    title: 'Р’С‹Р±РµСЂРёС‚Рµ РїР°РїРєСѓ РґР»СЏ СЃРєР°С‡РёРІР°РЅРёР№',
+    title: 'Выберите папку для скачиваний',
   });
 
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
+}));
+
+ipcMain.handle('app:clear-upload-folder', result(async () => {
+  selectedUploadFolder = null;
+  return null;
 }));
 
 ipcMain.handle('open-external', result(async (_event, url) => {
@@ -527,19 +780,7 @@ ipcMain.handle('app:get-current-version', result(async () => {
 
 ipcMain.handle('app:get-releases', result(async () => {
   const releases = await githubRequest('/repos/Appappars/Gitora/releases?per_page=20');
-  return releases.map(release => ({
-    tag: release.tag_name,
-    name: release.name,
-    body: release.body,
-    publishedAt: release.published_at,
-    prerelease: release.prerelease,
-    assets: release.assets.map(asset => ({
-      name: asset.name,
-      size: asset.size,
-      downloadUrl: asset.browser_download_url,
-      downloadCount: asset.download_count,
-    })),
-  }));
+  return releases.map(mapRelease);
 }));
 
 ipcMain.handle('app:download-release', result(async (_event, { url, fileName, options }) => {
