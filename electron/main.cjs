@@ -73,6 +73,22 @@ function validRepo(owner, repo) {
   return REPO_PART.test(owner) && REPO_PART.test(repo);
 }
 
+function mapRelease(release) {
+  return {
+    tag: release.tag_name,
+    name: release.name,
+    body: release.body,
+    publishedAt: release.published_at || release.created_at,
+    prerelease: release.prerelease,
+    assets: release.assets.map(asset => ({
+      name: asset.name,
+      size: asset.size,
+      downloadUrl: asset.browser_download_url,
+      downloadCount: asset.download_count,
+    })),
+  };
+}
+
 function result(handler) {
   return async (...args) => {
     try {
@@ -457,6 +473,49 @@ ipcMain.handle('github:create-issue', result(async (_event, { owner, repo, title
   });
 }));
 
+ipcMain.handle('github:create-release', result(async (_event, { owner, repo, input }) => {
+  if (!validRepo(owner, repo)) throw new Error('Некорректное имя репозитория');
+  const tagName = typeof input?.tagName === 'string' ? input.tagName.trim() : '';
+  if (!tagName) throw new Error('Введите тег релиза');
+
+  const release = await githubRequest(`/repos/${owner}/${repo}/releases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tag_name: tagName,
+      target_commitish: input.targetCommitish || undefined,
+      name: input.name || tagName,
+      body: input.body || '',
+      draft: Boolean(input.draft),
+      prerelease: Boolean(input.prerelease),
+    }),
+  });
+
+  const assetPath = typeof input?.assetPath === 'string' ? input.assetPath.trim() : '';
+  if (!assetPath) return mapRelease(release);
+
+  const asset = await fs.readFile(assetPath);
+  const uploadUrl = release.upload_url.replace(
+    '{?name,label}',
+    `?name=${encodeURIComponent(path.basename(assetPath))}`,
+  );
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      ...githubHeaders(),
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(asset.length),
+    },
+    body: asset,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.message || 'Не удалось загрузить файл релиза');
+  }
+
+  return mapRelease(await githubRequest(`/repos/${owner}/${repo}/releases/${release.id}`));
+}));
+
 ipcMain.handle('github:search-commits', result(async (_event, { owner, repo, query, author, since, until }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
   const params = new URLSearchParams({ per_page: '30' });
@@ -481,6 +540,19 @@ ipcMain.handle('app:select-upload-folder', result(async () => {
   return { path: folderData.path, fileCount: folderData.fileCount, totalBytes: folderData.totalBytes, warnings: folderData.warnings };
 }));
 
+ipcMain.handle('app:select-release-asset', result(async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: 'Выберите файл релиза',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const filePath = result.filePaths[0];
+  const stat = await fs.stat(filePath);
+  return { path: filePath, name: path.basename(filePath), size: stat.size };
+}));
+
 ipcMain.handle('app:clear-upload-folder', result(async () => {
   selectedUploadFolder = null;
   return null;
@@ -498,19 +570,7 @@ ipcMain.handle('app:get-current-version', result(async () => {
 
 ipcMain.handle('app:get-releases', result(async () => {
   const releases = await githubRequest('/repos/Appappars/Gitora/releases?per_page=20');
-  return releases.map(release => ({
-    tag: release.tag_name,
-    name: release.name,
-    body: release.body,
-    publishedAt: release.published_at,
-    prerelease: release.prerelease,
-    assets: release.assets.map(asset => ({
-      name: asset.name,
-      size: asset.size,
-      downloadUrl: asset.browser_download_url,
-      downloadCount: asset.download_count,
-    })),
-  }));
+  return releases.map(mapRelease);
 }));
 
 ipcMain.handle('app:download-release', result(async (_event, { url, fileName }) => {

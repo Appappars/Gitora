@@ -11,6 +11,7 @@ import {
   History,
   Link2,
   Menu,
+  PackagePlus,
   Pencil,
   Settings,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ import { EditModal } from './components/Modal/EditModal';
 import { BranchModal } from './components/Modal/BranchModal';
 import { CreatePRModal } from './components/Modal/CreatePRModal';
 import { CreateIssueModal } from './components/Modal/CreateIssueModal';
+import { CreateReleaseModal } from './components/Modal/CreateReleaseModal';
 import { SettingsModal } from './components/Modal/SettingsModal';
 import { LoginModal } from './components/Modal/LoginModal';
 import { UpdatesModal } from './components/Modal/UpdatesModal';
@@ -46,6 +48,7 @@ export const App: React.FC = () => {
     prOpen,
     settingsOpen,
     issueOpen,
+    releaseOpen,
     loginOpen,
     branchFilter,
     setBranchFilter,
@@ -59,6 +62,7 @@ export const App: React.FC = () => {
     branches,
     commits,
     setLoginOpen,
+    setReleaseOpen,
     openExternal,
   } = useApp();
 
@@ -165,6 +169,13 @@ export const App: React.FC = () => {
                 >
                   <Pencil size={17} />
                   Редактировать
+                </button>
+                <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
+                  onClick={() => setReleaseOpen(true)}
+                >
+                  <PackagePlus size={17} />
+                  Релиз
                 </button>
                 <button
                   className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
@@ -310,6 +321,12 @@ export const App: React.FC = () => {
       )}
       {issueOpen && project && (
         <CreateIssueModal repoFullName={project.repo} />
+      )}
+      {releaseOpen && project && (
+        <CreateReleaseModal
+          branches={branches}
+          repoFullName={project.repo}
+        />
       )}
       {settingsOpen && <SettingsModal />}
       <UpdatesModal />

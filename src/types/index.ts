@@ -150,6 +150,22 @@ export interface Release {
   assets: ReleaseAsset[];
 }
 
+export interface ReleaseAssetSelection {
+  path: string;
+  name: string;
+  size: number;
+}
+
+export interface CreateReleaseInput {
+  tagName: string;
+  targetCommitish?: string;
+  name?: string;
+  body?: string;
+  draft?: boolean;
+  prerelease?: boolean;
+  assetPath?: string;
+}
+
 export interface UploadFolderSummary {
   path: string;
   fileCount: number;
@@ -189,12 +205,14 @@ export interface ElectronAPI {
     getIssue: (owner: string, repo: string, number: number) => Promise<GitHubApiResult<GitHubIssue>>;
     createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<GitHubApiResult<GitHubIssue>>;
     searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubApiResult<GitHubCommit[]>>;
+    createRelease: (owner: string, repo: string, input: CreateReleaseInput) => Promise<GitHubApiResult<Release>>;
   };
   app: {
     getCurrentVersion: () => Promise<GitHubApiResult<string>>;
     getReleases: () => Promise<GitHubApiResult<Release[]>>;
     downloadRelease: (url: string, fileName: string) => Promise<GitHubApiResult<string>>;
     downloadArchive: (owner: string, repo: string, sha: string) => Promise<GitHubApiResult<string>>;
+    selectReleaseAsset: () => Promise<GitHubApiResult<ReleaseAssetSelection | null>>;
     selectUploadFolder: () => Promise<GitHubApiResult<UploadFolderSummary | null>>;
     clearUploadFolder: () => Promise<GitHubApiResult<null>>;
   };

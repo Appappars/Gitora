@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getIssue: (owner, repo, number) => ipcRenderer.invoke('github:issue', { owner, repo, number }),
     createIssue: (owner, repo, title, body, labels) => ipcRenderer.invoke('github:create-issue', { owner, repo, title, body, labels }),
     searchCommits: (owner, repo, query, author, since, until) => ipcRenderer.invoke('github:search-commits', { owner, repo, query, author, since, until }),
+    createRelease: (owner, repo, input) => ipcRenderer.invoke('github:create-release', { owner, repo, input }),
   },
   app: {
     getCurrentVersion: () => ipcRenderer.invoke('app:get-current-version'),
@@ -28,6 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     downloadRelease: (url, fileName) => ipcRenderer.invoke('app:download-release', { url, fileName }),
     downloadArchive: (owner, repo, sha) => ipcRenderer.invoke('app:download-archive', { owner, repo, sha }),
     selectUploadFolder: () => ipcRenderer.invoke('app:select-upload-folder'),
+    selectReleaseAsset: () => ipcRenderer.invoke('app:select-release-asset'),
     clearUploadFolder: () => ipcRenderer.invoke('app:clear-upload-folder'),
   },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),

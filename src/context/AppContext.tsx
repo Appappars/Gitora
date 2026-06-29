@@ -9,6 +9,7 @@ import React, {
 import {
   Branch,
   Commit,
+  CreateReleaseInput,
   CreateRepositoryResult,
   GitHubCommit,
   GitHubIssue,
@@ -17,6 +18,7 @@ import {
   GitHubUser,
   Project,
   Release,
+  ReleaseAssetSelection,
   UploadFolderSummary,
 } from '../types';
 import { computeGraphLayout, GraphLayoutResult } from '../lib/graphLayout';
@@ -33,6 +35,7 @@ interface AppState {
   settingsOpen: boolean;
   loginOpen: boolean;
   updatesOpen: boolean;
+  releaseOpen: boolean;
   toast: string;
   projects: Project[];
   commits: Commit[];
@@ -57,6 +60,7 @@ interface AppContextType extends AppState {
   setSettingsOpen: (open: boolean) => void;
   setLoginOpen: (open: boolean) => void;
   setUpdatesOpen: (open: boolean) => void;
+  setReleaseOpen: (open: boolean) => void;
   notify: (text: string) => void;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -82,8 +86,10 @@ interface AppContextType extends AppState {
   loadIssues: (owner: string, repo: string, state?: 'open' | 'closed' | 'all') => Promise<void>;
   getIssue: (owner: string, repo: string, number: number) => Promise<GitHubIssue | null>;
   createIssue: (owner: string, repo: string, title: string, body: string, labels?: string[]) => Promise<boolean>;
+  createRelease: (owner: string, repo: string, input: CreateReleaseInput) => Promise<boolean>;
   searchCommits: (owner: string, repo: string, query: string, author?: string, since?: string, until?: string) => Promise<GitHubCommit[]>;
   selectUploadFolder: () => Promise<UploadFolderSummary | null>;
+  selectReleaseAsset: () => Promise<ReleaseAssetSelection | null>;
   clearUploadFolder: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   loadReleases: () => Promise<void>;
@@ -149,6 +155,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
@@ -393,12 +400,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const createRelease = async (owner: string, repo: string, input: CreateReleaseInput): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const result = await window.electronAPI?.github.createRelease(owner, repo, input);
+      if (!result?.success) {
+        showError(result?.error || 'Не удалось создать релиз');
+        return false;
+      }
+      notify(`Релиз «${input.tagName}» создан`);
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const searchCommits = async (owner: string, repo: string, query: string, author?: string, since?: string, until?: string): Promise<GitHubCommit[]> => {
     const result = await window.electronAPI?.github.searchCommits(owner, repo, query, author, since, until);
     if (result?.success && result.data) {
       return result.data;
     }
     return [];
+  };
+
+  const selectReleaseAsset = async (): Promise<ReleaseAssetSelection | null> => {
+    if (!window.electronAPI) return null;
+    const result = await window.electronAPI.app.selectReleaseAsset();
+    if (result?.success) return result.data ?? null;
+    if (result?.error) showError(result.error);
+    return null;
   };
 
   const selectUploadFolder = async (): Promise<UploadFolderSummary | null> => {
@@ -559,6 +589,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       settingsOpen,
       loginOpen,
       updatesOpen,
+      releaseOpen,
       toast,
       projects,
       commits,
@@ -580,6 +611,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setSettingsOpen,
       setLoginOpen,
       setUpdatesOpen,
+      setReleaseOpen,
       notify,
       login,
       logout,
@@ -605,7 +637,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       loadIssues,
       getIssue,
       createIssue,
+      createRelease,
       searchCommits,
+      selectReleaseAsset,
       selectUploadFolder,
       clearUploadFolder,
       openExternal,

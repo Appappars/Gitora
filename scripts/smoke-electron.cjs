@@ -38,11 +38,13 @@ ipcMain.handle('github:repository', async () => ({
   },
 }));
 ipcMain.handle('github:create-repo', async () => ({ success: false, error: 'Disabled in smoke test' }));
+ipcMain.handle('github:create-release', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('open-external', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('app:get-current-version', async () => ({ success: true, data: 'smoke' }));
 ipcMain.handle('app:get-releases', async () => ({ success: true, data: [] }));
 ipcMain.handle('app:download-release', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('app:download-archive', async () => ({ success: false, error: 'Disabled in smoke test' }));
+ipcMain.handle('app:select-release-asset', async () => ({ success: true, data: null }));
 
 app.whenReady().then(async () => {
   const errors = [];
