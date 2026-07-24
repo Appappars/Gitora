@@ -15,7 +15,7 @@ try {
 
   New-Item -ItemType Directory -Force -Path $output | Out-Null
   Get-ChildItem -LiteralPath $tempOutput -File |
-    Where-Object { $_.Extension -in '.exe', '.blockmap', '.yml' } |
+    Where-Object { $_.Extension -in '.exe', '.blockmap' -or $_.Name -eq 'latest.yml' } |
     Copy-Item -Destination $output -Force
 
   Write-Host "Installer artifacts: $output"

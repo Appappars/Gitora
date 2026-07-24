@@ -16,6 +16,18 @@ const repo = {
   updated_at: '2026-06-21T12:00:00Z',
   default_branch: 'main',
 };
+const syncedRepo = {
+  id: 2,
+  name: 'synced-repo',
+  full_name: 'smoke-user/synced-repo',
+  private: false,
+  description: 'Added during sync',
+  stargazers_count: 0,
+  forks_count: 0,
+  updated_at: '2026-07-24T12:00:00Z',
+  default_branch: 'main',
+};
+let repoListCalls = 0;
 const commit = (sha, message, date, parents) => ({
   sha,
   commit: { message, author: { name: 'Smoke User', date } },
@@ -26,7 +38,10 @@ const commit = (sha, message, date, parents) => ({
 ipcMain.handle('github:restore-session', async () => ({ success: true, data: user }));
 ipcMain.handle('github:login', async () => ({ success: false, error: 'Disabled in smoke test' }));
 ipcMain.handle('github:logout', async () => ({ success: true, data: null }));
-ipcMain.handle('github:repos', async () => ({ success: true, data: [repo] }));
+ipcMain.handle('github:repos', async () => {
+  repoListCalls += 1;
+  return { success: true, data: repoListCalls === 2 ? [repo, syncedRepo] : [repo] };
+});
 ipcMain.handle('github:repository', async () => ({
   success: true,
   data: {
@@ -118,6 +133,29 @@ app.whenReady().then(async () => {
           && panelAfterScroll.bottom <= innerHeight + 1
           && panelAfterScroll.top <= panelBeforeScroll.top
         );
+        const refreshButton = [...document.querySelectorAll('button')]
+          .find(button => button.textContent?.includes('Обновить'));
+        const refreshButtonVisible = Boolean(refreshButton);
+        refreshButton?.click();
+        const listSyncDeadline = Date.now() + 2000;
+        while (!document.body.innerText.includes('synced-repo') && Date.now() < listSyncDeadline) {
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        const repositoryListUpdated = document.body.innerText.includes('synced-repo');
+        const refreshTimestampVisible = document.body.innerText.includes('Обновлено в');
+        [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Настройки'))?.click();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const syncButtonVisible = [...document.querySelectorAll('button')]
+          .some(button => button.textContent?.includes('Синхронизировать сейчас'));
+        [...document.querySelectorAll('button')]
+          .find(button => button.textContent?.includes('Синхронизировать сейчас'))?.click();
+        const deletionDeadline = Date.now() + 2000;
+        while (document.body.innerText.includes('synced-repo') && Date.now() < deletionDeadline) {
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        const deletedRepositoryRemoved = !document.body.innerText.includes('synced-repo');
+        document.querySelector('#settings-title')?.closest('[role="dialog"]')?.querySelector('button[aria-label="Закрыть"]')?.click();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         [...document.querySelectorAll('button')].find(button => button.textContent?.includes('README'))?.click();
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const readmeModal = document.querySelector('#readme-title');
@@ -133,6 +171,11 @@ app.whenReady().then(async () => {
         graphVisible: Boolean(node && edge),
         alignmentError,
         panelStaysVisible,
+        refreshButtonVisible,
+        refreshTimestampVisible,
+        repositoryListUpdated,
+        deletedRepositoryRemoved,
+        syncButtonVisible,
         readmeModalVisible: Boolean(readmeModal),
         changesModalVisible: Boolean(changesModal),
         panelBeforeTop: panelBeforeScroll?.top ?? null,
@@ -148,6 +191,11 @@ app.whenReady().then(async () => {
       || state.alignmentError === null
       || state.alignmentError > 0.5
       || !state.panelStaysVisible
+      || !state.refreshButtonVisible
+      || !state.refreshTimestampVisible
+      || !state.repositoryListUpdated
+      || !state.deletedRepositoryRemoved
+      || !state.syncButtonVisible
       || !state.readmeModalVisible
       || !state.changesModalVisible
       || errors.length

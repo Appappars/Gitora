@@ -4,51 +4,85 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { z } = require('zod');
 const fs = require('fs/promises');
+const net = require('net');
 const path = require('path');
 const os = require('os');
 
-const API_ORIGIN = 'https://api.github.com';
 const GITHUB_ORIGIN = 'https://github.com';
 
-async function readToken() {
-  const home = os.homedir();
-  const candidates = [
-    path.join(home, 'AppData', 'Roaming', 'gitora', 'github-session'),
-    path.join(home, 'AppData', 'Local', 'gitora', 'github-session'),
-    path.join(home, '.gitora', 'github-session'),
-  ];
+function bridgeCandidates(home = os.homedir()) {
+  const roots = [
+    process.env.APPDATA,
+    process.env.LOCALAPPDATA,
+    path.join(home, 'AppData', 'Roaming'),
+    path.join(home, 'AppData', 'Local'),
+    path.join(home, '.config'),
+    path.join(home, 'Library', 'Application Support'),
+    home,
+  ].filter(Boolean);
+  const appDirectories = roots.flatMap(root => [
+    path.join(root, 'gitora'),
+    path.join(root, 'Gitora'),
+  ]);
 
-  for (const candidate of candidates) {
-    try {
-      const raw = await fs.readFile(candidate, 'utf8');
-      const trimmed = raw.trim();
-      if (trimmed) return trimmed;
-    } catch {}
-  }
-  throw new Error('GitHub token not found. Open Gitora and login first.');
+  return [...new Set(appDirectories.map(directory => path.join(directory, 'mcp-bridge.json')))];
 }
 
-async function githubFetch(endpoint, token) {
-  const response = await fetch(`${API_ORIGIN}${endpoint}`, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'User-Agent': 'Gitora-MCP',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.message || `GitHub API: ${response.status}`);
+async function readBridgeMetadata() {
+  for (const candidate of bridgeCandidates()) {
+    try {
+      const metadata = JSON.parse(await fs.readFile(candidate, 'utf8'));
+      if (
+        metadata?.version === 1
+        && typeof metadata.socketPath === 'string'
+        && typeof metadata.secret === 'string'
+        && metadata.secret.length === 64
+      ) {
+        return metadata;
+      }
+    } catch {}
   }
+  throw new Error('Gitora session bridge not found. Open Gitora and login first.');
+}
 
-  return response.json();
+async function githubFetch(endpoint) {
+  const bridge = await readBridgeMetadata();
+
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(bridge.socketPath);
+    let response = '';
+
+    const fail = error => {
+      socket.destroy();
+      reject(error instanceof Error ? error : new Error('Gitora session bridge unavailable.'));
+    };
+
+    socket.setEncoding('utf8');
+    socket.setTimeout(5000, () => fail(new Error('Gitora session bridge timed out.')));
+    socket.once('error', fail);
+    socket.on('data', chunk => {
+      response += chunk;
+      const lineEnd = response.indexOf('\n');
+      if (lineEnd === -1) return;
+
+      socket.destroy();
+      try {
+        const result = JSON.parse(response.slice(0, lineEnd));
+        if (result.success) resolve(result.data);
+        else reject(new Error(result.error || 'Gitora session bridge request failed.'));
+      } catch {
+        reject(new Error('Invalid response from Gitora session bridge.'));
+      }
+    });
+    socket.once('connect', () => {
+      socket.write(`${JSON.stringify({ secret: bridge.secret, endpoint })}\n`);
+    });
+  });
 }
 
 const server = new McpServer({
   name: 'gitora',
-  version: '0.1.4',
+  version: '0.1.12',
 });
 
 server.tool(
@@ -59,11 +93,7 @@ server.tool(
       .describe('Sort order (default: updated)'),
   },
   async ({ sort }) => {
-    const token = await readToken();
-    const repos = await githubFetch(
-      `/user/repos?per_page=100&sort=${sort || 'updated'}`,
-      token
-    );
+    const repos = await githubFetch(`/user/repos?per_page=100&sort=${sort || 'updated'}`);
     return {
       content: [{
         type: 'text',
@@ -94,13 +124,9 @@ server.tool(
       .describe('Number of commits to return (default: 30, max: 100)'),
   },
   async ({ owner, repo, branch, limit }) => {
-    const token = await readToken();
     const params = new URLSearchParams({ per_page: String(limit || 30) });
     if (branch) params.set('sha', branch);
-    const commits = await githubFetch(
-      `/repos/${owner}/${repo}/commits?${params}`,
-      token
-    );
+    const commits = await githubFetch(`/repos/${owner}/${repo}/commits?${params}`);
     return {
       content: [{
         type: 'text',
@@ -127,11 +153,7 @@ server.tool(
     repo: z.string().describe('Repository name'),
   },
   async ({ owner, repo }) => {
-    const token = await readToken();
-    const branches = await githubFetch(
-      `/repos/${owner}/${repo}/branches?per_page=100`,
-      token
-    );
+    const branches = await githubFetch(`/repos/${owner}/${repo}/branches?per_page=100`);
     return {
       content: [{
         type: 'text',
@@ -155,11 +177,7 @@ server.tool(
     sha: z.string().describe('Commit SHA'),
   },
   async ({ owner, repo, sha }) => {
-    const token = await readToken();
-    const commit = await githubFetch(
-      `/repos/${owner}/${repo}/commits/${sha}`,
-      token
-    );
+    const commit = await githubFetch(`/repos/${owner}/${repo}/commits/${sha}`);
     return {
       content: [{
         type: 'text',
@@ -195,11 +213,7 @@ server.tool(
       .describe('Max results (default: 10)'),
   },
   async ({ owner, repo, query, limit }) => {
-    const token = await readToken();
-    const result = await githubFetch(
-      `/repos/${owner}/${repo}/commits?per_page=100`,
-      token
-    );
+    const result = await githubFetch(`/repos/${owner}/${repo}/commits?per_page=100`);
     const q = query.toLowerCase();
     const matched = result.filter(c =>
       c.commit.message.toLowerCase().includes(q)

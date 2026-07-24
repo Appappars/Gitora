@@ -214,7 +214,7 @@ export interface ElectronAPI {
     restoreSession: () => Promise<GitHubApiResult<GitHubUser | null>>;
     logout: () => Promise<GitHubApiResult<null>>;
     getRepos: () => Promise<GitHubApiResult<GitHubRepo[]>>;
-    getRepository: (owner: string, repo: string) => Promise<GitHubApiResult<RepositoryData>>;
+    getRepository: (owner: string, repo: string, commitLimit?: number) => Promise<GitHubApiResult<RepositoryData>>;
     createRepo: (
       name: string,
       description: string,

@@ -1,6 +1,7 @@
 {
   "appId": "com.gitora.app",
   "productName": "Gitora",
+  "artifactName": "${productName} ${version}.${ext}",
   "directories": {
     "output": "outputs/release"
   },

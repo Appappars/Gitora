@@ -50,6 +50,7 @@ interface AppState {
   loading: boolean;
   error: string | null;
   graphLayout: GraphLayoutResult | null;
+  lastUpdatedAt: string | null;
   releases: Release[];
   currentVersion: string;
 }
@@ -106,6 +107,8 @@ interface AppContextType extends AppState {
   loadReleases: () => Promise<void>;
   downloadRelease: (url: string, fileName: string) => Promise<string | null>;
   downloadArchive: (owner: string, repo: string, sha: string) => Promise<string | null>;
+  refreshRepositoryData: () => Promise<boolean>;
+  syncAllData: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -124,6 +127,18 @@ function readDownloadOptions(): DownloadOptions {
     };
   } catch {
     return { mode: 'downloads', directory: '' };
+  }
+}
+
+function readCommitLimit(): number {
+  try {
+    const settings = JSON.parse(localStorage.getItem('gitora-settings') || '{}') as { commitLimit?: number };
+    const commitLimit = settings.commitLimit;
+    return typeof commitLimit === 'number' && Number.isInteger(commitLimit) && commitLimit >= 25 && commitLimit <= 100
+      ? commitLimit
+      : 50;
+  } catch {
+    return 50;
   }
 }
 
@@ -194,8 +209,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [graphLayout, setGraphLayout] = useState<GraphLayoutResult | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [releases, setReleases] = useState<Release[]>([]);
-  const [currentVersion, setCurrentVersion] = useState('0.1.11');
+  const [currentVersion, setCurrentVersion] = useState('0.1.12');
   const toastTimer = useRef<number | undefined>(undefined);
   const requestId = useRef(0);
   const initialized = useRef(false);
@@ -254,6 +270,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBranches([]);
     setSelectedCommit(null);
     setGraphLayout(null);
+    setLastUpdatedAt(null);
     notify('GitHub отключён');
   };
 
@@ -323,6 +340,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return false;
       }
       notify(`Ветка «${name}» создана`);
+      await refreshRepositoryData();
       return true;
     } finally {
       setLoading(false);
@@ -338,6 +356,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return false;
       }
       notify(`Ветка «${branch}» удалена`);
+      await refreshRepositoryData();
       return true;
     } finally {
       setLoading(false);
@@ -353,6 +372,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return false;
       }
       notify(`Ветка переименована в «${newName}»`);
+      await refreshRepositoryData();
       return true;
     } finally {
       setLoading(false);
@@ -572,6 +592,114 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const loadRepositoryData = async (
+    targetProject: Project,
+    clearBeforeLoad: boolean,
+    notifyOnSuccess: boolean,
+  ): Promise<boolean> => {
+    const currentRequest = ++requestId.current;
+    const [owner, repo] = targetProject.repo.split('/');
+
+    if (clearBeforeLoad) {
+      setBranchFilter('all');
+      setSelectedCommit(null);
+      setGraphLayout(null);
+      setCommits([]);
+      setBranches([]);
+      setLastUpdatedAt(null);
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await window.electronAPI?.github.getRepository(owner, repo, readCommitLimit());
+      if (currentRequest !== requestId.current) return false;
+      if (!result?.success || !result.data) {
+        showError(result?.error || 'Не удалось загрузить репозиторий');
+        return false;
+      }
+
+      const repository = result.data;
+      const nextBranches = repository.branches.map((branch, index): Branch => ({
+        name: branch.name,
+        tipSha: branch.commit.sha,
+        color: branch.name === 'main' || branch.name === 'master'
+          ? 'var(--branch-main)'
+          : BRANCH_COLORS[(index + 1) % BRANCH_COLORS.length],
+      }));
+      const layout = computeGraphLayout(repository.commits, nextBranches);
+      setBranches(nextBranches);
+      setGraphLayout(layout);
+      setCommits(mapCommits(repository.commits, layout));
+      setProjects(current => current.map(item => (
+        item.id === targetProject.id
+          ? { ...item, commits: repository.commits.length, branches: nextBranches.length }
+          : item
+      )));
+      setLastUpdatedAt(new Date().toISOString());
+      if (notifyOnSuccess) notify('Обновлено');
+      return true;
+    } catch {
+      if (currentRequest === requestId.current) showError('Не удалось обновить данные');
+      return false;
+    } finally {
+      if (currentRequest === requestId.current) setLoading(false);
+    }
+  };
+
+  const refreshRepositoryData = async (): Promise<boolean> => {
+    if (!project || !connected || !window.electronAPI) return false;
+    return loadRepositoryData(project, false, true);
+  };
+
+  const syncAllData = async (): Promise<boolean> => {
+    if (!connected || !window.electronAPI) return false;
+
+    const syncRequest = ++requestId.current;
+    const currentProjectId = project?.id;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await window.electronAPI.github.getRepos();
+      if (syncRequest !== requestId.current) return false;
+      if (!result?.success || !result.data) {
+        showError(result?.error || 'Не удалось синхронизировать репозитории');
+        return false;
+      }
+
+      const nextProjects = mapProjects(result.data);
+      const nextProject = currentProjectId
+        ? nextProjects.find(item => item.id === currentProjectId) ?? nextProjects[0] ?? null
+        : nextProjects[0] ?? null;
+      const currentProjectStillExists = nextProject?.id === currentProjectId;
+
+      setProjects(nextProjects);
+      setProject(nextProject);
+
+      if (!nextProject) {
+        setBranchFilter('all');
+        setSelectedCommit(null);
+        setGraphLayout(null);
+        setCommits([]);
+        setBranches([]);
+        setLastUpdatedAt(null);
+        notify('Обновлено');
+        return true;
+      }
+
+      const refreshed = await loadRepositoryData(nextProject, !currentProjectStillExists, false);
+      if (refreshed) notify('Обновлено');
+      return refreshed;
+    } catch {
+      if (syncRequest === requestId.current) showError('Не удалось синхронизировать данные');
+      return false;
+    } finally {
+      if (syncRequest === requestId.current) setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
@@ -616,43 +744,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!project || !connected || !window.electronAPI) return;
-    const currentRequest = ++requestId.current;
-    const [owner, repo] = project.repo.split('/');
-    setLoading(true);
-    setError(null);
-    setBranchFilter('all');
-    setSelectedCommit(null);
-    setGraphLayout(null);
-    setCommits([]);
-    setBranches([]);
-
-    void window.electronAPI.github.getRepository(owner, repo).then(result => {
-      if (currentRequest !== requestId.current) return;
-      if (!result.success || !result.data) {
-        showError(result.error || 'Не удалось загрузить репозиторий');
-        return;
-      }
-
-      const repository = result.data;
-      const nextBranches = repository.branches.map((branch, index): Branch => ({
-        name: branch.name,
-        tipSha: branch.commit.sha,
-        color: branch.name === 'main' || branch.name === 'master'
-          ? 'var(--branch-main)'
-          : BRANCH_COLORS[(index + 1) % BRANCH_COLORS.length],
-      }));
-      const layout = computeGraphLayout(repository.commits, nextBranches);
-      setBranches(nextBranches);
-      setGraphLayout(layout);
-      setCommits(mapCommits(repository.commits, layout));
-      setProjects(current => current.map(item => (
-        item.id === project.id
-          ? { ...item, commits: repository.commits.length, branches: nextBranches.length }
-          : item
-      )));
-    }).finally(() => {
-      if (currentRequest === requestId.current) setLoading(false);
-    });
+    void loadRepositoryData(project, true, false);
   }, [project?.id, connected]);
 
   return (
@@ -679,6 +771,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       loading,
       error,
       graphLayout,
+      lastUpdatedAt,
       releases,
       currentVersion,
       setProject,
@@ -732,6 +825,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       loadReleases,
       downloadRelease,
       downloadArchive,
+      refreshRepositoryData,
+      syncAllData,
     }}>
       {children}
     </AppContext.Provider>

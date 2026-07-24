@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FolderOpen, Palette, Settings, X } from 'lucide-react';
+import { FolderOpen, Palette, RefreshCw, Settings, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { applyThemePreference, ThemePreference } from '../../lib/theme';
 
@@ -18,15 +18,18 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 export const SettingsModal: React.FC = () => {
-  const { setSettingsOpen, loading, notify } = useApp();
+  const { setSettingsOpen, loading, notify, project, connected, lastUpdatedAt, refreshRepositoryData, syncAllData } = useApp();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [closing, setClosing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('gitora-settings');
     if (saved) {
       try {
-        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
+        const nextSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } as Settings;
+        if (![25, 50, 100].includes(nextSettings.commitLimit)) nextSettings.commitLimit = DEFAULT_SETTINGS.commitLimit;
+        setSettings(nextSettings);
       } catch {}
     }
   }, []);
@@ -45,9 +48,10 @@ export const SettingsModal: React.FC = () => {
     window.setTimeout(() => setSettingsOpen(false), 150);
   };
 
-  const save = () => {
+  const save = async () => {
     localStorage.setItem('gitora-settings', JSON.stringify(settings));
     applyThemePreference(settings.theme);
+    if (project) await refreshRepositoryData();
     notify('Настройки сохранены');
     close();
   };
@@ -66,6 +70,19 @@ export const SettingsModal: React.FC = () => {
       });
     } else if (result?.error) {
       notify(result.error);
+    }
+  };
+
+  const syncRepository = async () => {
+    if (!connected || syncing) {
+      notify('Сначала подключите GitHub');
+      return;
+    }
+    setSyncing(true);
+    try {
+      await syncAllData();
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -94,6 +111,33 @@ export const SettingsModal: React.FC = () => {
         </p>
 
         <div className="space-y-6">
+          <div className="border border-[rgba(38,23,50,.12)] rounded-xl p-3 bg-[#F3EFE9]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-bold">Синхронизация с GitHub</h3>
+                <p className="text-[10px] text-[#7D7482] mt-1">
+                  Обновить список репозиториев, ветки, коммиты и граф текущего репозитория.
+                </p>
+              </div>
+              <RefreshCw size={17} className="text-[#7D7482] flex-none" />
+            </div>
+            <button
+              type="button"
+              className="mt-3 h-9 px-3 bg-[#261732] text-[#E7E0D6] rounded-lg text-[11px] font-semibold flex items-center gap-2 disabled:opacity-40"
+              onClick={() => void syncRepository()}
+              disabled={!connected || loading || syncing}
+              aria-label={syncing ? 'Синхронизация с GitHub' : 'Синхронизировать с GitHub'}
+            >
+              <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Синхронизация…' : 'Синхронизировать сейчас'}
+            </button>
+            <p className="text-[10px] text-[#7D7482] mt-2" aria-live="polite">
+              {lastUpdatedAt
+                ? `Последнее обновление: ${new Date(lastUpdatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                : connected ? 'Синхронизация ещё не выполнялась' : 'Подключите GitHub, чтобы синхронизировать данные'}
+            </p>
+          </div>
+
           <div>
             <label className="text-xs font-bold block mb-2">Тема</label>
             <div className="grid grid-cols-3 gap-2">
@@ -183,7 +227,7 @@ export const SettingsModal: React.FC = () => {
             <h3 className="text-xs font-bold mb-2">О приложении</h3>
             <div className="text-[11px] text-[#7D7482] space-y-1">
               <p>Gitora — визуальный граф истории Git</p>
-              <p>Версия: 0.1.11</p>
+              <p>Версия: 0.1.12</p>
               <p>Разработано совместно Sabinchous и Appappars</p>
             </div>
           </div>
@@ -195,7 +239,8 @@ export const SettingsModal: React.FC = () => {
           </button>
           <button
             className="px-4 py-2 bg-[#261732] text-[#E7E0D6] rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
-            onClick={save}
+            onClick={() => void save()}
+            disabled={loading || syncing}
           >
             <Palette size={16} />
             Сохранить

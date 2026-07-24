@@ -15,6 +15,7 @@ import {
   Menu,
   PackagePlus,
   Pencil,
+  RefreshCw,
   Settings,
 } from 'lucide-react';
 import { useApp } from './context/AppContext';
@@ -61,6 +62,7 @@ export const App: React.FC = () => {
     toast,
     notify,
     loading,
+    lastUpdatedAt,
     error,
     user,
     connected,
@@ -72,6 +74,7 @@ export const App: React.FC = () => {
     setReadmeOpen,
     setChangesOpen,
     openExternal,
+    syncAllData,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'graph' | 'pr' | 'issues'>('graph');
@@ -172,6 +175,15 @@ export const App: React.FC = () => {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
+                  className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold disabled:opacity-50"
+                  onClick={() => void syncAllData()}
+                  disabled={loading}
+                  aria-label={loading ? 'Обновление данных' : 'Обновить данные репозитория'}
+                >
+                  <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                  {loading ? 'Обновление...' : 'Обновить'}
+                </button>
+                <button
                   className="h-[34px] border border-[rgba(38,23,50,.12)] bg-white rounded-lg flex items-center gap-2 px-3 text-[11px] font-semibold"
                   onClick={() => setEditOpen(true)}
                 >
@@ -215,6 +227,11 @@ export const App: React.FC = () => {
                   <ExternalLink size={14} />
                 </button>
               </div>
+              {lastUpdatedAt && (
+                <p className="text-[10px] text-[#7D7482] lg:text-right" aria-live="polite">
+                  Обновлено в {new Date(lastUpdatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
             </section>
 
             <section className="mx-4 sm:mx-8 mb-5 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-0 p-4 bg-white rounded-xl border border-[rgba(38,23,50,.12)]">

@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restoreSession: () => ipcRenderer.invoke('github:restore-session'),
     logout: () => ipcRenderer.invoke('github:logout'),
     getRepos: () => ipcRenderer.invoke('github:repos'),
-    getRepository: (owner, repo) => ipcRenderer.invoke('github:repository', { owner, repo }),
+    getRepository: (owner, repo, commitLimit) => ipcRenderer.invoke('github:repository', { owner, repo, commitLimit }),
     createRepo: (name, description, isPrivate, folderPath) =>
       ipcRenderer.invoke('github:create-repo', { name, description, private: isPrivate, folderPath }),
     deleteRepo: (owner, repo) => ipcRenderer.invoke('github:delete-repo', { owner, repo }),

@@ -3,7 +3,15 @@ const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 const ignore = require('ignore');
-const { githubErrorMessage } = require('./githubErrors.cjs');
+const {
+  githubErrorMessage,
+  isAllowedGitHubDownloadUrl,
+  isValidIssueNumber,
+  isValidGitSha,
+  isValidGitRef,
+  isValidCommitLimit,
+} = require('./githubErrors.cjs');
+const { createMcpBridge } = require('./mcpBridge.cjs');
 
 const isDev = process.argv.includes('--dev');
 const GITHUB_ORIGIN = 'https://github.com';
@@ -12,6 +20,7 @@ const REPO_PART = /^[A-Za-z0-9_.-]+$/;
 
 let mainWindow;
 let githubToken = null;
+let mcpBridge = null;
 
 function tokenPath() {
   return path.join(app.getPath('userData'), 'github-session');
@@ -111,6 +120,26 @@ function isAllowedExternal(rawUrl) {
   } catch {
     return false;
   }
+}
+
+async function fetchAllowedGitHubDownload(rawUrl) {
+  let currentUrl = rawUrl;
+
+  for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
+    const response = await fetch(currentUrl, { redirect: 'manual' });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+
+    const location = response.headers.get('location');
+    if (!location) throw new Error('Ссылка на release asset содержит неполный редирект');
+
+    const nextUrl = new URL(location, currentUrl).toString();
+    if (!isAllowedGitHubDownloadUrl(nextUrl)) {
+      throw new Error('Ссылка перенаправила на запрещённый адрес');
+    }
+    currentUrl = nextUrl;
+  }
+
+  throw new Error('Слишком много перенаправлений при скачивании release asset');
 }
 
 function isAllowedNavigation(rawUrl) {
@@ -419,6 +448,15 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   await restoreToken();
+  try {
+    mcpBridge = createMcpBridge({
+      metadataPath: path.join(app.getPath('userData'), 'mcp-bridge.json'),
+      request: endpoint => githubRequest(endpoint),
+    });
+    await mcpBridge.start();
+  } catch (error) {
+    console.error('MCP bridge unavailable:', error);
+  }
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -427,6 +465,10 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  void mcpBridge?.stop();
 });
 
 ipcMain.handle('github:login', result(async (_event, token) => {
@@ -457,10 +499,11 @@ ipcMain.handle('github:repos', result(async () => (
   githubRequest('/user/repos?per_page=100&sort=updated')
 )));
 
-ipcMain.handle('github:repository', result(async (_event, { owner, repo }) => {
+ipcMain.handle('github:repository', result(async (_event, { owner, repo, commitLimit }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!isValidCommitLimit(commitLimit)) throw new Error('Некорректный лимит коммитов');
   const [commits, branches] = await Promise.all([
-    githubRequest(`/repos/${owner}/${repo}/commits?per_page=50`),
+    githubRequest(`/repos/${owner}/${repo}/commits?per_page=${commitLimit}`),
     githubRequest(`/repos/${owner}/${repo}/branches?per_page=100`),
   ]);
   return { commits, branches };
@@ -516,7 +559,8 @@ ipcMain.handle('github:update-repo', result(async (_event, { owner, repo, data }
 
 ipcMain.handle('github:create-branch', result(async (_event, { owner, repo, name, fromSha }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
-  if (!name || !REPO_PART.test(name)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
+  if (!isValidGitRef(name)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
+  if (!isValidGitSha(fromSha)) throw new Error('Некорректный SHA исходного коммита');
   return githubRequest(`/repos/${owner}/${repo}/git/refs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -529,18 +573,18 @@ ipcMain.handle('github:create-branch', result(async (_event, { owner, repo, name
 
 ipcMain.handle('github:delete-branch', result(async (_event, { owner, repo, branch }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
-  if (!branch || !REPO_PART.test(branch)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
-  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, { method: 'DELETE' });
+  if (!isValidGitRef(branch)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
+  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${refPath(branch)}`, { method: 'DELETE' });
   return null;
 }));
 
 ipcMain.handle('github:rename-branch', result(async (_event, { owner, repo, branch, newName }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
-  if (!branch || !REPO_PART.test(branch)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
-  if (!newName || !REPO_PART.test(newName)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РЅРѕРІРѕРµ РёРјСЏ РІРµС‚РєРё');
+  if (!isValidGitRef(branch)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РІРµС‚РєРё');
+  if (!isValidGitRef(newName)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РЅРѕРІРѕРµ РёРјСЏ РІРµС‚РєРё');
 
-  const ref = await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${branch}`);
-  return githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${refPath(branch)}`);
+  return githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${refPath(branch)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -560,6 +604,7 @@ ipcMain.handle('github:pull-requests', result(async (_event, { owner, repo, stat
 
 ipcMain.handle('github:pull-request', result(async (_event, { owner, repo, number }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!isValidIssueNumber(number)) throw new Error('Некорректный номер pull request');
   return githubRequest(`/repos/${owner}/${repo}/pulls/${number}`);
 }));
 
@@ -582,6 +627,7 @@ ipcMain.handle('github:issues', result(async (_event, { owner, repo, state }) =>
 
 ipcMain.handle('github:issue', result(async (_event, { owner, repo, number }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!isValidIssueNumber(number)) throw new Error('Некорректный номер issue');
   return githubRequest(`/repos/${owner}/${repo}/issues/${number}`);
 }));
 
@@ -784,7 +830,11 @@ ipcMain.handle('app:get-releases', result(async () => {
 }));
 
 ipcMain.handle('app:download-release', result(async (_event, { url, fileName, options }) => {
-  const response = await fetch(url);
+  if (!isAllowedGitHubDownloadUrl(url)) {
+    throw new Error('Разрешены только HTTPS-ссылки на GitHub release assets');
+  }
+
+  const response = await fetchAllowedGitHubDownload(url);
   if (!response.ok) throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ С„Р°Р№Р»');
 
   const filePath = await resolveDownloadPath(fileName, options);
@@ -798,6 +848,7 @@ ipcMain.handle('app:download-release', result(async (_event, { url, fileName, op
 
 ipcMain.handle('app:download-archive', result(async (_event, { owner, repo, sha, options }) => {
   if (!validRepo(owner, repo)) throw new Error('РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ');
+  if (!isValidGitSha(sha)) throw new Error('Некорректный SHA коммита');
 
   const url = `${GITHUB_ORIGIN}/${owner}/${repo}/archive/${sha}.zip`;
   const response = await fetch(url, {

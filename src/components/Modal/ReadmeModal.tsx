@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { BookOpen, Save, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { BookOpen, LoaderCircle, Save, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Branch } from '../../types';
 
@@ -15,25 +15,52 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({ branches, repoFullName
   const [branch, setBranch] = useState(defaultBranch || branches[0]?.name || 'main');
   const [content, setContent] = useState('');
   const [message, setMessage] = useState('Обновлён README');
+  const [readmeLoading, setReadmeLoading] = useState(true);
+  const [dirty, setDirty] = useState(false);
+  const [readmeNotice, setReadmeNotice] = useState('');
+  const requestId = useRef(0);
 
   useEffect(() => {
-    void getReadme(owner, repo, branch).then(setContent);
+    const currentRequest = ++requestId.current;
+    setReadmeLoading(true);
+    setReadmeNotice('');
+
+    void getReadme(owner, repo, branch).then(nextContent => {
+      if (currentRequest !== requestId.current) return;
+      setContent(nextContent);
+      setDirty(false);
+    }).finally(() => {
+      if (currentRequest === requestId.current) setReadmeLoading(false);
+    });
   }, [owner, repo, branch]);
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !loading) setReadmeOpen(false);
+      if (event.key === 'Escape' && !loading && !readmeLoading) setReadmeOpen(false);
     };
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
-  }, [loading, setReadmeOpen]);
+  }, [loading, readmeLoading, setReadmeOpen]);
 
-  const close = () => !loading && setReadmeOpen(false);
+  const close = () => !loading && !readmeLoading && setReadmeOpen(false);
+
+  const changeBranch = (nextBranch: string) => {
+    if (nextBranch === branch) return;
+    if (dirty) {
+      setReadmeNotice('Сначала сохраните README или отмените изменения.');
+      return;
+    }
+    setBranch(nextBranch);
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (readmeLoading) return;
     const ok = await saveReadme(owner, repo, branch, content, message);
-    if (ok) setReadmeOpen(false);
+    if (ok) {
+      setDirty(false);
+      setReadmeOpen(false);
+    }
   };
 
   return (
@@ -66,8 +93,9 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({ branches, repoFullName
               <input
                 list="readme-branches"
                 value={branch}
-                onChange={(event) => setBranch(event.target.value)}
-                className="block w-full h-[42px] border border-[rgba(38,23,50,.12)] bg-[#F3EFE9] rounded-lg px-3 text-sm mt-2"
+                onChange={(event) => changeBranch(event.target.value)}
+                disabled={loading || readmeLoading}
+                className="block w-full h-[42px] border border-[rgba(38,23,50,.12)] bg-[#F3EFE9] rounded-lg px-3 text-sm mt-2 disabled:opacity-50"
               />
               <datalist id="readme-branches">
                 {branches.map(item => <option key={item.name} value={item.name} />)}
@@ -89,12 +117,26 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({ branches, repoFullName
             <textarea
               autoFocus
               value={content}
-              onChange={(event) => setContent(event.target.value)}
+              onChange={(event) => {
+                setContent(event.target.value);
+                setDirty(true);
+              }}
+              disabled={loading || readmeLoading}
               rows={14}
-              className="block w-full resize-y min-h-[260px] border border-[rgba(38,23,50,.12)] bg-[#F3EFE9] rounded-lg p-3 text-sm mt-2 font-mono"
+              className="block w-full resize-y min-h-[260px] border border-[rgba(38,23,50,.12)] bg-[#F3EFE9] rounded-lg p-3 text-sm mt-2 font-mono disabled:opacity-50"
               placeholder={`# ${repo}\n\nОписание проекта.`}
             />
           </label>
+
+          {readmeLoading && (
+            <p className="flex items-center gap-2 text-xs text-[#7D7482] mt-3" role="status">
+              <LoaderCircle size={14} className="animate-spin" />
+              Загружаем README…
+            </p>
+          )}
+          {readmeNotice && (
+            <p className="text-xs text-[#9A5B20] mt-3" role="alert">{readmeNotice}</p>
+          )}
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-6">
             <button type="button" className="px-4 py-2 border border-[rgba(38,23,50,.12)] rounded-lg text-sm font-semibold" onClick={close}>
@@ -102,7 +144,7 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({ branches, repoFullName
             </button>
             <button
               type="submit"
-              disabled={loading || !message.trim()}
+              disabled={loading || readmeLoading || !message.trim()}
               className="px-4 py-2 bg-[#261732] text-[#E7E0D6] rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
             >
               <Save size={16} />
